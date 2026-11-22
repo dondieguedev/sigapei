@@ -1,16 +1,3 @@
-/**
- * PageCandidature - Formulaire public de candidature dynamique.
- *
- * Génération rigoureuse :
- *  - Seuls les champs correspondant aux critères configurés par l'établissement sont affichés
- *  - Les champs marqués obligatoires dans le critère le sont aussi dans le formulaire
- *  - Les numéros de téléphone utilisent PhoneInput (indicatifs) comme dans AuthPage
- *  - Les pièces à fournir listent uniquement les obligatoires en priorité
- *  - reCAPTCHA Enterprise avant soumission
- *  - Erreurs via NoticeModal
- *
- * URL : /etablissements/:slug/candidature?appel={uuid}
- */
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import PhoneInput from 'react-phone-number-input'
@@ -35,18 +22,6 @@ function useRecaptchaBadge() {
   }, [])
 }
 
-/* ══════════════════════════════════════════════════════════
-   Définition des champs par type de critère
-   Chaque critère de l'appel peut imposer required=true
-══════════════════════════════════════════════════════════ */
-
-/**
- * Génère la liste de champs à partir des critères configurés par l'établissement.
- * - L'identité (nom/prénom/sexe) est toujours présente
- * - Chaque critère ajoute ses propres champs
- * - Le caractère obligatoire provient du critère (c.obligatoire)
- * - Aucun champ "par défaut" non demandé n'est ajouté
- */
 function genererChamps(appel) {
   const criteres = Array.isArray(appel?.criteres_eligibilite) ? appel.criteres_eligibilite : []
 
@@ -142,9 +117,7 @@ function genererChamps(appel) {
   return champs
 }
 
-/* ══════════════════════════════════════════════════════════
-   Champ téléphone avec sélecteur d'indicatif (PhoneInput)
-══════════════════════════════════════════════════════════ */
+
 function ChampTelephone({ id, label, required, erreur, value, onChange }) {
   const [country, setCountry] = useState('BJ')
 
@@ -181,9 +154,8 @@ function ChampTelephone({ id, label, required, erreur, value, onChange }) {
   )
 }
 
-/* ══════════════════════════════════════════════════════════
-   Composant principal
-══════════════════════════════════════════════════════════ */
+
+
 export default function PageCandidature() {
   const { slug } = useParams()
   const [searchParams] = useSearchParams()
@@ -220,9 +192,20 @@ export default function PageCandidature() {
 
   // Pièces : obligatoires en premier, puis les optionnelles
   const pieces = useMemo(() => {
-    const liste = Array.isArray(appel?.pieces_a_fournir) ? appel.pieces_a_fournir : []
+    // Le backend retourne pieces_fournir (sans _a_)
+    const liste = Array.isArray(appel?.pieces_a_fournir) ? appel.pieces_a_fournir
+      : Array.isArray(appel?.pieces_fournir) ? appel.pieces_fournir
+      : []
     return [...liste.filter((p) => p.obligatoire !== false), ...liste.filter((p) => p.obligatoire === false)]
   }, [appel])
+
+  /* Fichiers uploadés par pièce */
+  const [fichiers, setFichiers] = useState({})
+
+  function setFichier(id, file) {
+    setFichiers((f) => ({ ...f, [id]: file }))
+    setErreurs((e) => { const n = { ...e }; delete n[`fichier_${id}`]; return n })
+  }
 
   /* Formulaire initialisé selon les champs générés */
   const [form, setForm] = useState({})
@@ -239,6 +222,8 @@ export default function PageCandidature() {
   /* Validation */
   function valider() {
     const e = {}
+
+    // 1. Champs obligatoires de base
     for (const c of champs) {
       if (!c.required) continue
       const val = form[c.id] ?? ''
@@ -246,14 +231,73 @@ export default function PageCandidature() {
         e[c.id] = `${c.label} est obligatoire.`
         continue
       }
-      // Validation spécifique téléphone
       if (c.type === 'tel' && val && !isValidPhoneNumber(val)) {
         e[c.id] = `${c.label} : numéro invalide.`
       }
     }
+
+    // 2. Vérification des critères d'éligibilité de l'appel
+    const criteres = Array.isArray(appel?.criteres_eligibilite) ? appel.criteres_eligibilite : []
+    for (const crit of criteres) {
+      const type = crit.type
+
+      // Critère âge - vérifier la tranche de date de naissance
+      if (type === 'age' && form.date_naissance) {
+        const dn = new Date(form.date_naissance)
+        if (crit.date_min) {
+          const min = new Date(crit.date_min)
+          if (dn < min) {
+            e.date_naissance = `Date de naissance trop ancienne. Elle doit être après le ${min.toLocaleDateString('fr-FR')}.`
+          }
+        }
+        if (crit.date_max && !e.date_naissance) {
+          const max = new Date(crit.date_max)
+          if (dn > max) {
+            e.date_naissance = `Date de naissance trop récente. Elle doit être avant le ${max.toLocaleDateString('fr-FR')}.`
+          }
+        }
+      }
+
+      // Critère type_inscription - vérifier que la modalité est renseignée
+      if (type === 'type_inscription' && !form.type_inscription) {
+        e.type_inscription = "La modalité d'admission est obligatoire pour cet appel."
+      }
+
+      // Critère contact - au moins téléphone ou email
+      if (type === 'contact' && !form.telephone && !form.email) {
+        e.telephone = "Un téléphone ou un email de contact est requis pour cet appel."
+      }
+
+      // Critère niveau_scolaire
+      if (type === 'niveau_scolaire' && !form.niveau_precedent?.trim()) {
+        e.niveau_precedent = "Le niveau scolaire précédent est obligatoire pour cet appel."
+      }
+
+      // Critère adresse
+      if (type === 'adresse' && !form.adresse?.trim()) {
+        e.adresse = "L'adresse est obligatoire pour cet appel."
+      }
+
+      // Critère parent_tuteur
+      if (type === 'parent_tuteur') {
+        if (!form.parent_nom?.trim()) e.parent_nom = "Le nom du parent / tuteur est obligatoire."
+        if (!form.parent_telephone) e.parent_telephone = "Le téléphone du parent / tuteur est obligatoire."
+        if (form.parent_telephone && !isValidPhoneNumber(form.parent_telephone)) {
+          e.parent_telephone = "Numéro du parent invalide."
+        }
+      }
+    }
+
+    // 3. Fichiers obligatoires
+    for (const p of pieces) {
+      if (p.obligatoire !== false && !fichiers[p.id ?? p.libelle]) {
+        e[`fichier_${p.id ?? p.libelle}`] = `${p.libelle} est obligatoire.`
+      }
+    }
+
     setErreurs(e)
     if (Object.keys(e).length > 0) {
-      setModal({ type: 'warning', title: 'Champs incomplets', message: 'Veuillez remplir tous les champs obligatoires.' })
+      setModal({ type: 'warning', title: 'Dossier incomplet', message: 'Certains champs obligatoires sont manquants ou invalides. Veuillez les corriger avant de soumettre.' })
       return false
     }
     return true
@@ -266,11 +310,24 @@ export default function PageCandidature() {
     setEnvoi(true)
     try {
       const captchaToken = await getCaptchaToken('candidature_publique')
-      await candidaturePubliqueService.soumettre(slug, {
-        ...form,
-        appel_uuid:    appelUuid ?? undefined,
-        captcha_token: captchaToken || undefined,
-      })
+
+      // Construire FormData si des fichiers sont présents
+      const aFichiers = Object.keys(fichiers).length > 0
+      if (aFichiers) {
+        const fd = new FormData()
+        fd.append('slug', slug)
+        if (appelUuid) fd.append('appel_uuid', appelUuid)
+        if (captchaToken) fd.append('captcha_token', captchaToken)
+        Object.entries(form).forEach(([k, v]) => { if (v !== '') fd.append(k, v) })
+        Object.entries(fichiers).forEach(([k, f]) => { if (f) fd.append(`fichiers[${k}]`, f) })
+        await candidaturePubliqueService.soumettreFd(slug, fd)
+      } else {
+        await candidaturePubliqueService.soumettre(slug, {
+          ...form,
+          appel_uuid:    appelUuid ?? undefined,
+          captcha_token: captchaToken || undefined,
+        })
+      }
       setSucces(true)
     } catch (err) {
       setModal({
@@ -427,23 +484,71 @@ export default function PageCandidature() {
                 })}
               </div>
 
-              {/* Pièces à fournir - obligatoires en premier */}
+              {/* Pièces justificatives - champs upload */}
               {pieces.length > 0 && (
-                <div style={{ background: 'rgba(233,170,32,0.07)', border: '1px solid rgba(233,170,32,0.25)', borderRadius: 10, padding: '14px 18px' }}>
-                  <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: '0.85rem', color: '#a07010', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Paperclip size={14} /> Pièces justificatives à apporter
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: '0.9rem', color: 'var(--sg-text)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Paperclip size={15} /> Pièces justificatives
                   </p>
-                  <ul style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 5 }}>
-                    {pieces.map((p, i) => (
-                      <li key={i} style={{ fontSize: '0.84rem', color: 'var(--sg-text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {p.obligatoire !== false && (
-                          <span style={{ color: '#c0392b', fontWeight: 700, fontSize: '0.75rem', flexShrink: 0 }}>Obligatoire</span>
-                        )}
-                        {p.libelle}
-                        {p.format && <span style={{ fontSize: '0.72rem', color: 'var(--sg-text-muted)', background: 'rgba(0,0,0,0.06)', borderRadius: 4, padding: '1px 5px' }}>{p.format}</span>}
-                      </li>
-                    ))}
-                  </ul>
+                  {pieces.map((p, i) => {
+                    const pieceId   = p.id ?? p.libelle ?? `piece-${i}`
+                    const erreurKey = `fichier_${pieceId}`
+                    const erreur    = erreurs[erreurKey]
+                    const fichier   = fichiers[pieceId]
+                    const accept    = p.format === 'PDF' ? '.pdf'
+                      : p.format === 'JPEG, PNG' ? '.jpg,.jpeg,.png'
+                      : '.pdf,.jpg,.jpeg,.png'
+
+                    return (
+                      <div key={pieceId} className="ap-field" style={{
+                        background: erreur ? 'rgba(192,57,43,0.04)' : 'rgba(0,107,60,0.03)',
+                        border: `1.5px solid ${erreur ? '#c0392b' : 'rgba(0,107,60,0.15)'}`,
+                        borderRadius: 10, padding: '12px 14px',
+                      }}>
+                        <label className="ap-label" htmlFor={`fichier-${pieceId}`} style={{ marginBottom: 6 }}>
+                          {p.libelle}
+                          {p.obligatoire !== false && <span style={{ color: '#c0392b' }}> *</span>}
+                          {p.format && (
+                            <span style={{ marginLeft: 8, fontSize: '0.72rem', color: 'var(--sg-text-muted)', background: 'rgba(0,0,0,0.06)', borderRadius: 4, padding: '1px 6px', fontWeight: 400 }}>
+                              {p.format}
+                            </span>
+                          )}
+                        </label>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                          <label
+                            htmlFor={`fichier-${pieceId}`}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 6,
+                              padding: '8px 16px', borderRadius: 8, cursor: 'pointer',
+                              background: fichier ? 'rgba(0,107,60,0.1)' : 'var(--sg-surface,#fff)',
+                              border: `1.5px solid ${fichier ? '#006B3C' : 'var(--sg-border,#dde4df)'}`,
+                              color: fichier ? '#006B3C' : 'var(--sg-text-secondary)',
+                              fontSize: '0.84rem', fontWeight: 600,
+                              transition: 'all 0.15s',
+                            }}
+                          >
+                            <Paperclip size={13} />
+                            {fichier ? 'Changer le fichier' : 'Choisir un fichier'}
+                          </label>
+                          <input
+                            id={`fichier-${pieceId}`}
+                            type="file"
+                            accept={accept}
+                            style={{ display: 'none' }}
+                            onChange={(e) => setFichier(pieceId, e.target.files?.[0] ?? null)}
+                          />
+                          {fichier && (
+                            <span style={{ fontSize: '0.82rem', color: '#006B3C', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <CheckCircle2 size={13} /> {fichier.name}
+                            </span>
+                          )}
+                        </div>
+
+                        {erreur && <p className="ap-error" style={{ marginTop: 6 }}>{erreur}</p>}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
 
@@ -453,12 +558,13 @@ export default function PageCandidature() {
                 Ce formulaire est protégé par reCAPTCHA Enterprise.
               </p>
 
-              <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
-                <button type="submit" className="ae2-btn" style={{ fontSize: '1rem', padding: '12px 36px' }} disabled={envoi}>
-                  {envoi ? 'Vérification en cours…' : 'Soumettre ma candidature'}
-                </button>
+              {/* Actions : Annuler à gauche, Soumettre à droite */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
                 <button type="button" className="ae2-btn ae2-btn--ghost" onClick={() => navigate(-1)} disabled={envoi}>
                   Annuler
+                </button>
+                <button type="submit" className="ae2-btn" style={{ fontSize: '1rem', padding: '12px 36px' }} disabled={envoi}>
+                  {envoi ? 'Vérification en cours…' : 'Soumettre ma candidature'}
                 </button>
               </div>
             </form>

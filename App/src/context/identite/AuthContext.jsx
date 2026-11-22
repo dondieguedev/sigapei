@@ -29,17 +29,27 @@ const touch = () => {
 /**
  * URL de redirection après déconnexion.
  *
- * - manual → accueil contextuel :
- *     super_admin      → racine de la plateforme  (/)
- *     utilisateur etab → accueil public de son établissement
- *     fallback         → racine de la plateforme
- *
- * - expired / idle / other → /login pour permettre la reconnexion,
- *   RequireAuth transmettra automatiquement « from » pour retourner
- *   sur la page en cours après une nouvelle connexion.
+ * - manual → accueil contextuel (établissement ou plateforme selon le rôle)
+ * - expired / idle / other → page de connexion contextualisée :
+ *     si on est sur un établissement → /login?etablissement=slug
+ *     sinon → /login
+ *   RequireAuth conserve « from » pour retourner sur la page après reconnexion.
  */
+function urlLoginContextuel() {
+  // 1. Slug depuis l'URL courante (mode local : /etablissements/{slug}/...)
+  const slugUrl = detecterSlugEtablissement()
+  if (slugUrl) return `${LOGIN_PATH}?etablissement=${encodeURIComponent(slugUrl)}`
+
+  // 2. Cache localStorage (sauvegardé lors du chargement du portail)
+  const slugCache = lireSlugEtablissementCache()
+  if (slugCache) return `${LOGIN_PATH}?etablissement=${encodeURIComponent(slugCache)}`
+
+  // 3. Pas de contexte établissement → page de connexion principale
+  return LOGIN_PATH
+}
+
 function urlApresDeconnexion(reason, userSnapshot) {
-  if (reason !== 'manual') return LOGIN_PATH
+  if (reason !== 'manual') return urlLoginContextuel()
 
   const payload  = decodeJwt(tokenStore.getAccess() ?? '')
   const roleCode = payload?.roleCode ?? payload?.role ?? ''

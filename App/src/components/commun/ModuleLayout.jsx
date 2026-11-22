@@ -6,6 +6,7 @@ import { roleCodeOf }        from '../../config/identite/routes'
 import { lienEtablissement } from '../../lib/etablissements/subdomain'
 import ThemeToggle           from './ThemeToggle'
 import NotificationBell      from './NotificationBell'
+import AppFooter             from './AppFooter'
 import { ENV }               from '../../config/commun/env'
 import { portailService }    from '../../services/identite/portail.service'
 import useSlugEtablissement  from '../../hooks/etablissements/useSlugEtablissement'
@@ -173,7 +174,10 @@ export default function ModuleLayout({ titre, icone: ModuleIcone, couleur, nav =
             </div>
           </div>
         </header>
-        <div className="ml-content">{children}</div>
+        <div className="ml-content">
+          <div className="ml-content-inner">{children}</div>
+          <AppFooter etabNom={etablissementNom} />
+        </div>
       </div>
     </div>
   )

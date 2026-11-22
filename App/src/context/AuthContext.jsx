@@ -7,6 +7,19 @@ import { ApiError, refreshSession, unwrap } from '../lib/http'
 import { extractSession, tokenStore } from '../lib/tokenStore'
 import { useNotify } from './NotifyContext'
 
+const LOGIN_PATH = '/login'
+
+/** Construit /login?etablissement=slug si on est dans le contexte d'un établissement. */
+function loginContextuel() {
+  try {
+    const match = window.location.pathname.match(/^\/etablissements\/([^/]+)/)
+    if (match?.[1]) return `${LOGIN_PATH}?etablissement=${encodeURIComponent(match[1])}`
+    const cached = localStorage.getItem('sigapei.etab_slug')
+    if (cached) return `${LOGIN_PATH}?etablissement=${encodeURIComponent(cached)}`
+  } catch { /* ignore */ }
+  return LOGIN_PATH
+}
+
 const AuthContext = createContext(null)
 
 const ACTIVITY_KEY = 'sigapei.activity'
@@ -42,7 +55,7 @@ export function AuthProvider({ children }) {
       setStatus('anonymous')
       const [type, title, msg] = LOGOUT_MESSAGES[reason] ?? LOGOUT_MESSAGES.expired
       notify[type](title, msg)
-      navigate('/login', { replace: true })
+      navigate(loginContextuel(), { replace: true })
       setTimeout(() => { closing.current = false }, 500)
     },
     [navigate, notify],

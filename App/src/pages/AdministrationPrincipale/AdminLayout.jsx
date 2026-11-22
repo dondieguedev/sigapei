@@ -8,6 +8,7 @@ import { useAuth } from '../../context/identite/AuthContext'
 import { withAuth } from '../../components/identite/RequireAuth'
 import ThemeToggle from '../../components/commun/ThemeToggle'
 import NotificationBell from '../../components/commun/NotificationBell'
+import AppFooter from '../../components/commun/AppFooter'
 import { ENV } from '../../config/commun/env'
 import { ADMIN_DASHBOARD_PATH, COMPTE_PATH } from '../../config/identite/routes'
 import { ADMIN_PATHS } from '../../config/etablissements/config'
@@ -181,7 +182,8 @@ function AdminLayoutInner({ pageTitle }) {
 
         {/* Page content via Outlet */}
         <div className="al-content">
-          <Outlet />
+          <div className="al-content-inner"><Outlet /></div>
+          <AppFooter />
         </div>
       </div>
     </div>

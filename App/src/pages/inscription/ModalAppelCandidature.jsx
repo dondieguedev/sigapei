@@ -1,12 +1,3 @@
-/**
- * ModalAppelCandidature.jsx - Création et modification d'appels à candidature
- * Structuration stricte selon les 4 cycles d'enseignement :
- * 1. Maternelle & Primaire : ciblage par Groupe (ou Cycle unique)
- * 2. Secondaire : ciblage par Promotion, et pour les promotions à séries, par Série
- * 3. Universitaire : ciblage par Niveau d'études de chaque Filière (Département / Option)
- * Critères dynamiques (Age/Date, Type inscription : Test/Concours avec matières composées, etc.)
- * Pièces à fournir dynamiques, statut Payant/Gratuit (+ montant FCFA), dates/heures précises.
- */
 import { useState, useEffect, useMemo } from 'react'
 import {
   X,
@@ -24,6 +15,7 @@ import {
   subdivisionsService,
   niveauxService,
   seriesService,
+  classesService,
 } from '../../services/etablissements/configurationAcademique.service'
 import Loader from '../../components/commun/Loader'
 
@@ -66,6 +58,8 @@ export default function ModalAppelCandidature({
   const [subdivisions, setSubdivisions] = useState([])
   const [niveaux, setNiveaux] = useState([])
   const [series, setSeries] = useState([])
+  const [classes, setClasses] = useState([])
+  const [chargementClasses, setChargementClasses] = useState(false)
   const [chargementDonnees, setChargementDonnees] = useState(false)
 
   // Formulaire d'appel
@@ -85,6 +79,8 @@ export default function ModalAppelCandidature({
     departement_uuid: '',
     option_uuid: '',
     niveau_uuid: '',
+    // Classe visée (toujours) :
+    classe_uuid: '',
     // Dates & Heures précises :
     date_debut: '',
     date_fin: '',
@@ -99,9 +95,10 @@ export default function ModalAppelCandidature({
 
   const [erreurs, setErreurs] = useState({})
 
-  // Charger les référentiels académiques lors de l'ouverture
+  // Charger les référentiels ET initialiser le formulaire ensemble
   useEffect(() => {
     if (!ouvert) return
+
     const charger = async () => {
       setChargementDonnees(true)
       try {
@@ -118,12 +115,107 @@ export default function ModalAppelCandidature({
         setNiveaux(rNiv?.data ?? rNiv ?? [])
         setSeries(rSer?.data ?? rSer ?? [])
 
-        // Si nouvel appel, présélectionner l'année active
-        if (!appelInitial) {
+        // ── Initialiser le formulaire APRÈS que les référentiels sont chargés ──
+        if (appelInitial) {
+          const listeSubs    = rSub?.data ?? rSub ?? []
+          const listeNiveaux = rNiv?.data ?? rNiv ?? []
+          const listeSeries  = rSer?.data ?? rSer ?? []
+
+          // Retrouver les UUIDs depuis les noms/IDs stockés par le backend
+          const cycleAppel = appelInitial.cycle || cycleInitial
+          const getCycleS  = (s) => s.cycle ?? s.cycleConfig?.cycle ?? s.cycle_config?.cycle ?? null
+
+          // Groupe : chercher par groupe_id ou groupe_nom
+          const subdivision = listeSubs.find((s) =>
+            (appelInitial.groupe_id && s.id === appelInitial.groupe_id) ||
+            (appelInitial.groupe_nom && s.nom === appelInitial.groupe_nom && getCycleS(s) === cycleAppel)
+          )
+
+          // Promotion : chercher par promotion_nom ou abreviation
+          const promotion = listeNiveaux.find((n) =>
+            n.cycle === 'secondaire' && (
+              n.nom === appelInitial.promotion_nom ||
+              n.abreviation === appelInitial.promotion_abreviation
+            )
+          )
+
+          // Série : chercher par code ou nom
+          const serie = listeSeries.find((s) =>
+            s.code === appelInitial.serie_code || s.nom === appelInitial.serie_nom
+          )
+
+          // Département/option/niveau universitaire
+          const departement = listeSubs.find((s) => s.nom === appelInitial.departement_nom)
+          const option       = listeSeries.find((s) => s.nom === appelInitial.option_nom)
+          const niveau       = listeNiveaux.find((n) => n.nom === appelInitial.niveau_etude && n.cycle === 'universitaire')
+
+          setForm({
+            titre:                  appelInitial.titre || '',
+            description:            appelInitial.description || '',
+            cycle:                  cycleAppel,
+            annee_academique_uuid:  appelInitial.annee_academique_uuid
+              || (appelInitial.annee_scolaire
+                  ? listeAnnees.find((a) => a.libelle === appelInitial.annee_scolaire)?.uuid
+                  : undefined)
+              || anneeActive?.uuid
+              || '',
+            cycle_unique:           !!appelInitial.est_cycle_unique,
+            subdivision_uuid:       subdivision?.uuid || appelInitial.subdivision_uuid || appelInitial.groupe_uuid || '',
+            promotion_uuid:         promotion?.uuid   || appelInitial.promotion_uuid   || '',
+            serie_uuid:             serie?.uuid        || appelInitial.serie_uuid      || '',
+            cycle_univ:             appelInitial.cycle_univ || 'licence',
+            departement_uuid:       departement?.uuid  || appelInitial.departement_uuid || '',
+            option_uuid:            option?.uuid        || appelInitial.option_uuid     || '',
+            niveau_uuid:            niveau?.uuid        || appelInitial.niveau_uuid     || '',
+            classe_uuid:            appelInitial.classe_uuid || '',
+            date_debut:             appelInitial.date_debut ? appelInitial.date_debut.slice(0, 16) : '',
+            date_fin:               appelInitial.date_fin   ? appelInitial.date_fin.slice(0, 16)   : '',
+            statut:                 appelInitial.statut || 'ouvert',
+            est_payant:             !!appelInitial.est_payant,
+            frais_dossier:          appelInitial.frais_dossier || appelInitial.montant || '',
+            criteres_eligibilite:   Array.isArray(appelInitial.criteres_eligibilite) ? appelInitial.criteres_eligibilite : [],
+            pieces_a_fournir:       Array.isArray(appelInitial.pieces_a_fournir)
+              ? appelInitial.pieces_a_fournir
+              : Array.isArray(appelInitial.pieces_fournir)
+              ? appelInitial.pieces_fournir
+              : [],
+          })
+        } else {
+          // Mode création : valeurs par défaut
           const active = anneeActive || listeAnnees.find((a) => a.est_active) || listeAnnees[0]
-          if (active) {
-            setForm((f) => ({ ...f, annee_academique_uuid: active.uuid }))
-          }
+          const now    = new Date()
+          const debut  = new Date(now.getTime() + 24 * 3600 * 1000).toISOString().slice(0, 16)
+          const fin    = new Date(now.getTime() + 31 * 24 * 3600 * 1000).toISOString().slice(0, 16)
+
+          setForm((f) => ({
+            ...f,
+            titre: '',
+            description: '',
+            cycle: cycleInitial,
+            annee_academique_uuid: active?.uuid || f.annee_academique_uuid,
+            cycle_unique: false,
+            subdivision_uuid: '',
+            promotion_uuid: '',
+            serie_uuid: '',
+            cycle_univ: 'licence',
+            departement_uuid: '',
+            option_uuid: '',
+            niveau_uuid: '',
+            classe_uuid: '',
+            date_debut: debut,
+            date_fin: fin,
+            statut: 'ouvert',
+            est_payant: false,
+            frais_dossier: '',
+            criteres_eligibilite: [
+              { id: 'crit-1', type: 'type_inscription', label: "Modalité d'admission", mode: 'concours', matieres_composees: ['Mathématiques', 'Français'] },
+              { id: 'crit-2', type: 'age', label: 'Tranche de date de naissance', date_min: '2008-01-01', date_max: '2012-12-31' },
+            ],
+            pieces_a_fournir: [
+              { id: 'p-1', libelle: 'Acte de naissance légalisé', format: 'PDF', obligatoire: true },
+              { id: 'p-2', libelle: 'Dernier relevé de notes / bulletin', format: 'PDF', obligatoire: true },
+            ],
+          }))
         }
       } catch (err) {
         console.error('Erreur chargement référentiels:', err)
@@ -131,90 +223,28 @@ export default function ModalAppelCandidature({
         setChargementDonnees(false)
       }
     }
-    charger()
-  }, [ouvert, appelInitial, anneeActive?.uuid])
 
-  // Initialisation ou réinitialisation du formulaire
-  useEffect(() => {
-    if (appelInitial) {
-      setForm({
-        titre: appelInitial.titre || '',
-        description: appelInitial.description || '',
-        cycle: appelInitial.cycle || cycleInitial,
-        annee_academique_uuid: appelInitial.annee_academique_uuid || anneeActive?.uuid || '',
-        cycle_unique: !!appelInitial.cycle_unique,
-        subdivision_uuid: appelInitial.subdivision_uuid || '',
-        promotion_uuid: appelInitial.promotion_uuid || '',
-        serie_uuid: appelInitial.serie_uuid || '',
-        cycle_univ: appelInitial.cycle_univ || 'licence',
-        departement_uuid: appelInitial.departement_uuid || '',
-        option_uuid: appelInitial.option_uuid || '',
-        niveau_uuid: appelInitial.niveau_uuid || '',
-        date_debut: appelInitial.date_debut ? appelInitial.date_debut.slice(0, 16) : '',
-        date_fin: appelInitial.date_fin ? appelInitial.date_fin.slice(0, 16) : '',
-        statut: appelInitial.statut || 'ouvert',
-        est_payant: !!appelInitial.est_payant,
-        frais_dossier: appelInitial.frais_dossier || '',
-        criteres_eligibilite: Array.isArray(appelInitial.criteres_eligibilite)
-          ? appelInitial.criteres_eligibilite
-          : [],
-        pieces_a_fournir: Array.isArray(appelInitial.pieces_a_fournir)
-          ? appelInitial.pieces_a_fournir
-          : [],
-      })
-    } else {
-      const now = new Date()
-      const debut = new Date(now.getTime() + 24 * 3600 * 1000).toISOString().slice(0, 16)
-      const fin = new Date(now.getTime() + 31 * 24 * 3600 * 1000).toISOString().slice(0, 16)
-
-      setForm((f) => ({
-        ...f,
-        titre: '',
-        description: '',
-        cycle: cycleInitial,
-        annee_academique_uuid: anneeActive?.uuid || f.annee_academique_uuid,
-        cycle_unique: false,
-        subdivision_uuid: '',
-        promotion_uuid: '',
-        serie_uuid: '',
-        cycle_univ: 'licence',
-        departement_uuid: '',
-        option_uuid: '',
-        niveau_uuid: '',
-        date_debut: debut,
-        date_fin: fin,
-        statut: 'ouvert',
-        est_payant: false,
-        frais_dossier: '',
-        criteres_eligibilite: [
-          {
-            id: 'crit-1',
-            type: 'type_inscription',
-            label: "Modalité d'admission",
-            mode: 'concours',
-            matieres_composees: ['Mathématiques', 'Français'],
-          },
-          {
-            id: 'crit-2',
-            type: 'age',
-            label: 'Tranche de date de naissance',
-            date_min: '2008-01-01',
-            date_max: '2012-12-31',
-          },
-        ],
-        pieces_a_fournir: [
-          { id: 'p-1', libelle: 'Acte de naissance légalisé', format: 'PDF', obligatoire: true },
-          { id: 'p-2', libelle: 'Dernier relevé de notes / bulletin', format: 'PDF', obligatoire: true },
-        ],
-      }))
-    }
     setErreurs({})
-  }, [appelInitial, ouvert])
+    charger()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ouvert, appelInitial?.uuid])
 
-  // Filtres contextuels selon le cycle
+  // Helper : extraire le cycle d'une subdivision (relation imbriquée ou champ direct)
+  const getCycleSubdivision = (s) => s.cycle ?? s.cycleConfig?.cycle ?? s.cycle_config?.cycle ?? null
+
+  // Filtres contextuels selon le cycle - strict : uniquement les groupes du cycle sélectionné
+  // Le cycle est dans cycleConfig.cycle (relation imbriquée retournée par l'API)
+  // Déduplication par uuid pour éviter les doublons
   const subdivisionsCycle = useMemo(() => {
-    return subdivisions.filter((s) => s.cycle === form.cycle || !s.cycle)
-  }, [subdivisions, form.cycle])
+    const vus = new Set()
+    return subdivisions.filter((s) => {
+      const cycle = getCycleSubdivision(s)
+      if (cycle !== form.cycle) return false
+      if (vus.has(s.uuid)) return false
+      vus.add(s.uuid)
+      return true
+    })
+  }, [subdivisions, form.cycle]) // eslint-disable-line
 
   const promotionsSecondaire = useMemo(() => {
     return niveaux.filter((n) => n.cycle === 'secondaire')
@@ -236,19 +266,60 @@ export default function ModalAppelCandidature({
 
   // Université : départements, options, niveaux
   const departementsUniv = useMemo(() => {
-    return subdivisions.filter((s) => s.type === 'departement' || s.cycle === 'universitaire')
+    return subdivisions.filter((s) => {
+      const cycle = getCycleSubdivision(s)
+      return s.type === 'departement' || cycle === 'universitaire'
+    })
   }, [subdivisions])
 
   const optionsUniv = useMemo(() => {
     return series.filter((s) => {
       const matchDep = !form.departement_uuid || s.subdivision?.uuid === form.departement_uuid
-      return s.cycle === 'universitaire' && matchDep
+      const cycle = s.cycle ?? s.cycleConfig?.cycle ?? null
+      return cycle === 'universitaire' && matchDep
     })
   }, [series, form.departement_uuid])
 
   const niveauxUniv = useMemo(() => {
     return niveaux.filter((n) => n.cycle === 'universitaire')
   }, [niveaux])
+
+  // ── Chargement automatique des classes selon la sélection ──
+  useEffect(() => {
+    if (!form.annee_academique_uuid) return
+    let annule = false
+
+    const params = {
+      annee_uuid: form.annee_academique_uuid,
+      cycle:      form.cycle,
+    }
+    // Filtrer par niveau (maternelle/primaire = subdivision, secondaire = promotion, universitaire = niveau)
+    if (form.subdivision_uuid) params.subdivision_uuid = form.subdivision_uuid
+    if (form.promotion_uuid)   params.niveau_uuid      = form.promotion_uuid
+    if (form.serie_uuid)       params.serie_uuid        = form.serie_uuid
+    if (form.niveau_uuid)      params.niveau_uuid       = form.niveau_uuid
+
+    setChargementClasses(true)
+    setClasses([])
+    setForm((f) => ({ ...f, classe_uuid: '' }))
+
+    classesService.lister(params)
+      .then((r) => {
+        if (!annule) setClasses(r?.data ?? r ?? [])
+      })
+      .catch(() => { if (!annule) setClasses([]) })
+      .finally(() => { if (!annule) setChargementClasses(false) })
+
+    return () => { annule = true }
+  }, [
+    form.annee_academique_uuid,
+    form.cycle,
+    form.cycle_unique,
+    form.subdivision_uuid,
+    form.promotion_uuid,
+    form.serie_uuid,
+    form.niveau_uuid,
+  ]) // eslint-disable-line
 
   // Génération automatique d'un titre représentatif
   const titreAuto = useMemo(() => {
@@ -398,6 +469,11 @@ export default function ModalAppelCandidature({
       if (!form.niveau_uuid) err.niveau_uuid = "Niveau d'études requis."
     }
 
+    // Classe visée obligatoire (sauf cycle unique sans classe configurée)
+    if (!form.classe_uuid && classes.length > 0) {
+      err.classe_uuid = 'Sélectionnez la classe visée par cet appel.'
+    }
+
     if (!form.date_debut) err.date_debut = 'Date et heure de début requises.'
     if (!form.date_fin) err.date_fin = 'Date et heure de fin requises.'
     if (form.date_debut && form.date_fin && form.date_debut >= form.date_fin) {
@@ -416,17 +492,55 @@ export default function ModalAppelCandidature({
     ev.preventDefault()
     if (!valider()) return
 
+    // ── Résoudre les UUIDs en noms pour le backend ──
+    const annee       = annees.find((a) => a.uuid === form.annee_academique_uuid)
+    const subdivision = subdivisionsCycle.find((s) => s.uuid === form.subdivision_uuid)
+    const promotion   = niveaux.find((n) => n.uuid === form.promotion_uuid)
+    const serie       = series.find((s) => s.uuid === form.serie_uuid)
+    const departement = subdivisions.find((s) => s.uuid === form.departement_uuid)
+    const option      = series.find((s) => s.uuid === form.option_uuid)
+    const niveau      = niveaux.find((n) => n.uuid === form.niveau_uuid)
+
+    const classeVisee = classes.find((c) => c.uuid === form.classe_uuid)
+
     const payload = {
-      ...form,
-      titre: form.titre.trim() || titreAuto,
-      frais_dossier: form.est_payant ? Number(form.frais_dossier) : 0,
-      annee_academique_uuid: form.annee_academique_uuid || undefined,
-      subdivision_uuid: form.subdivision_uuid || undefined,
-      promotion_uuid: form.promotion_uuid || undefined,
-      serie_uuid: form.serie_uuid || undefined,
-      departement_uuid: form.departement_uuid || undefined,
-      option_uuid: form.option_uuid || undefined,
-      niveau_uuid: form.niveau_uuid || undefined,
+      // Champs de base
+      cycle:               form.cycle,
+      titre:               form.titre.trim() || titreAuto,
+      description:         form.description || undefined,
+      annee_scolaire:      annee?.libelle ?? annee?.nom ?? annee?.annee ?? undefined,
+      date_debut:          form.date_debut,
+      date_fin:            form.date_fin,
+      statut:              form.statut,
+      est_payant:          form.est_payant,
+      montant:             form.est_payant ? Number(form.frais_dossier) : 0,
+      devise:              'FCFA',
+
+      // Classe visée - ID entier requis par la DB
+      classe_visee_id:     classeVisee?.id    ?? undefined,
+      classe_uuid:         form.classe_uuid   || undefined,
+
+      // Maternelle / Primaire
+      est_cycle_unique:    form.cycle_unique,
+      groupe_id:           subdivision?.id    ?? undefined,
+      groupe_nom:          subdivision?.nom   ?? undefined,
+
+      // Secondaire
+      promotion_nom:         promotion?.nom          ?? undefined,
+      promotion_abreviation: promotion?.abreviation  ?? undefined,
+      serie_nom:             serie?.nom              ?? undefined,
+      serie_code:            serie?.code             ?? undefined,
+
+      // Universitaire
+      cycle_univ:          form.cycle_univ            || undefined,
+      departement_nom:     departement?.nom           ?? undefined,
+      option_nom:          option?.nom                ?? undefined,
+      niveau_etude:        niveau?.nom                ?? undefined,
+      filiere_complete:    departementsUniv.find((d) => d.uuid === form.departement_uuid)?.nom ?? undefined,
+
+      // Critères & Pièces
+      criteres_eligibilite: form.criteres_eligibilite,
+      pieces_fournir:       form.pieces_a_fournir,
     }
 
     onEnregistrer(payload)
@@ -483,6 +597,8 @@ export default function ModalAppelCandidature({
                         departement_uuid: '',
                         option_uuid: '',
                         niveau_uuid: '',
+                        classe_uuid: '',
+                        cycle_unique: false,
                       }))
                     }
                     className={`ap-btn ${form.cycle === c.id ? '' : 'ap-btn--ghost'}`}
@@ -514,13 +630,43 @@ export default function ModalAppelCandidature({
               {(form.cycle === 'maternelle' || form.cycle === 'primaire') && (
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.88rem' }}>
-                      <input
-                        type="checkbox"
-                        checked={form.cycle_unique}
-                        onChange={(e) => setForm((f) => ({ ...f, cycle_unique: e.target.checked, subdivision_uuid: '' }))}
-                      />
-                      <span>Établissement en <strong>Cycle unique</strong> (aucun groupe distinct)</span>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}>
+                      {/* Toggle switch stylé */}
+                      <span
+                        role="checkbox"
+                        aria-checked={form.cycle_unique}
+                        tabIndex={0}
+                        onClick={() => setForm((f) => ({ ...f, cycle_unique: !f.cycle_unique, subdivision_uuid: '' }))}
+                        onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setForm((f) => ({ ...f, cycle_unique: !f.cycle_unique, subdivision_uuid: '' })) } }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          width: 40,
+                          height: 22,
+                          borderRadius: 11,
+                          background: form.cycle_unique ? 'var(--primary, #047857)' : 'var(--sg-border, #d1d5db)',
+                          transition: 'background 0.2s',
+                          position: 'relative',
+                          flexShrink: 0,
+                          cursor: 'pointer',
+                          outline: 'none',
+                        }}
+                      >
+                        <span style={{
+                          position: 'absolute',
+                          left: form.cycle_unique ? 20 : 2,
+                          width: 18,
+                          height: 18,
+                          borderRadius: '50%',
+                          background: '#fff',
+                          boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
+                          transition: 'left 0.2s',
+                        }} />
+                      </span>
+                      <span style={{ fontSize: '0.88rem', color: 'var(--sg-text, #1a2a1e)', lineHeight: 1.4 }}>
+                        Établissement en <strong style={{ color: 'var(--primary, #047857)' }}>Cycle unique</strong>
+                        <span style={{ display: 'block', fontSize: '0.76rem', color: 'var(--sg-text-muted, #6b7280)', fontWeight: 400 }}>Aucun groupe distinct - tous les élèves dans la même structure</span>
+                      </span>
                     </label>
                   </div>
 
@@ -536,7 +682,7 @@ export default function ModalAppelCandidature({
                         <option value="">-- Sélectionner le groupe (ex. Groupe A, Groupe B) --</option>
                         {subdivisionsCycle.map((s) => (
                           <option key={s.uuid} value={s.uuid}>
-                            {s.nom} {s.code ? `(${s.code})` : ''}
+                            {s.nom}{s.code && s.code !== s.nom && !s.nom.includes(s.code) ? ` (${s.code})` : ''}
                           </option>
                         ))}
                       </select>
@@ -658,6 +804,45 @@ export default function ModalAppelCandidature({
               )}
             </div>
 
+            {/* 2b. CLASSE VISÉE - sélection automatique selon la structure */}
+            <div className="ap-card" style={{ padding: 16, border: '1px solid var(--border-color, #e2e8f0)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <CheckCircle2 size={18} color="var(--primary, #047857)" />
+                <strong style={{ fontSize: '0.95rem' }}>Classe visée *</strong>
+                {chargementClasses && <Loader mode="button" />}
+              </div>
+
+              {classes.length === 0 && !chargementClasses ? (
+                <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--sg-text-muted)', fontStyle: 'italic' }}>
+                  {form.subdivision_uuid || form.promotion_uuid || form.niveau_uuid || form.cycle_unique
+                    ? 'Aucune classe trouvée pour cette sélection. Vérifiez la configuration académique.'
+                    : 'Sélectionnez d\'abord la structure cible pour afficher les classes disponibles.'}
+                </p>
+              ) : (
+                <div className={`ap-field${erreurs.classe_uuid ? ' has-error' : ''}`}>
+                  <label className="ap-label" htmlFor="app-cls">
+                    Sélectionnez la classe exacte ciblée par cet appel *
+                  </label>
+                  <select
+                    id="app-cls"
+                    className="ap-input"
+                    value={form.classe_uuid}
+                    disabled={chargementClasses}
+                    onChange={(e) => setForm((f) => ({ ...f, classe_uuid: e.target.value }))}
+                  >
+                    <option value="">{chargementClasses ? 'Chargement…' : '-- Sélectionner la classe --'}</option>
+                    {classes.map((c) => (
+                      <option key={c.uuid} value={c.uuid}>
+                        {c.sigle} - {c.nom}
+                        {c.effectif_previsionnel ? ` (${c.effectif_previsionnel} places)` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {erreurs.classe_uuid && <p className="ap-error">{erreurs.classe_uuid}</p>}
+                </div>
+              )}
+            </div>
+
             {/* 3. CRITÈRES D'ÉLIGIBILITÉ DYNAMIQUES */}
             <div className="ap-card" style={{ padding: 16, border: '1px solid var(--border-color, #e2e8f0)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -698,7 +883,7 @@ export default function ModalAppelCandidature({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {form.criteres_eligibilite.map((crit, idx) => (
                     <div
-                      key={crit.id}
+                      key={crit.id ?? crit.uuid ?? idx}
                       style={{
                         padding: 12,
                         background: 'var(--sg-surface-2, #f8fafc)',
@@ -895,9 +1080,9 @@ export default function ModalAppelCandidature({
                 </p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {form.pieces_a_fournir.map((p) => (
+                  {form.pieces_a_fournir.map((p, pIdx) => (
                     <div
-                      key={p.id}
+                      key={p.id ?? p.uuid ?? pIdx}
                       style={{
                         display: 'grid',
                         gridTemplateColumns: '2fr 1fr 100px 40px',

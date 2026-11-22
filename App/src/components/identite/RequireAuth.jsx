@@ -5,8 +5,15 @@ import { useAuth } from '../../context/identite/AuthContext'
 import { useNotify } from '../../context/commun/NotifyContext'
 import Loader from '../commun/Loader'
 import { LOGIN_PATH, redirectionPostLogin, roleCodeOf } from '../../config/identite/routes'
+import { detecterSlugEtablissement, lireSlugEtablissementCache } from '../../lib/etablissements/subdomain'
 
 export const roleOf = (u) => u?.role?.code ?? u?.roleCode ?? (typeof u?.role === 'string' ? u.role : undefined)
+
+/** Construit la cible /login?etablissement=slug si contexte établissement détecté. */
+function loginContextuel() {
+  const slug = detecterSlugEtablissement() ?? lireSlugEtablissementCache()
+  return slug ? `${LOGIN_PATH}?etablissement=${encodeURIComponent(slug)}` : LOGIN_PATH
+}
 
 /**
  * GARDE D'AUTHENTIFICATION
@@ -51,7 +58,7 @@ export default function RequireAuth({ children, roles }) {
   /* ── Non connecté ── */
   if (status !== 'authenticated') {
     if (logoutReason) return <Loader label="Redirection en cours…" />
-    return <Navigate to={LOGIN_PATH} replace state={{ from: location }} />
+    return <Navigate to={loginContextuel()} replace state={{ from: location }} />
   }
 
   /* ── Connecté mais rôle insuffisant ── */

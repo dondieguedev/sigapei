@@ -18,6 +18,11 @@ return [
             // Schema dedie Neon pour le microservice Inscription dans la base unique
             'search_path' => env('DB_SCHEMA', 'inscription'),
             'sslmode' => env('DB_SSLMODE', 'require'),
+            // Désactiver les prepared statements pour éviter "cached plan must not change"
+            // (notamment après une migration sur Neon PostgreSQL serverless)
+            'options' => [
+                PDO::ATTR_EMULATE_PREPARES => true,
+            ],
             // Contournement SNI pour libpq ancienne (XAMPP / Docker sans SNI)
             // NeonServiceProvider injecte cet endpoint dans le DSN PDO via NeonPostgresConnector
             'neon_endpoint' => env('DB_ENDPOINT', ''),

@@ -12,11 +12,20 @@
   font-family: 'Century Gothic', 'Questrial', 'Poppins', system-ui, sans-serif;
   color: var(--sg-text, #1a2a1e);
   font-size: 16px;
-  /* Compense le header fixed (b1 + b2 = 52+52 = 104px desktop) */
+  /* Desktop : header b1 (52px) + b2 (52px) = 104px */
   padding-top: calc(var(--aeh-b1-h, 52px) + var(--aeh-b2-h, 52px));
 }
+/* Tablette 1024px : logo-pad réduit mais deux bandes toujours présentes */
+@media (max-width: 1024px) {
+  .ae2-page { padding-top: calc(var(--aeh-b1-h, 52px) + var(--aeh-b2-h, 52px)); }
+}
+/* Mobile 768px : b2 cachée, seulement b1 */
 @media (max-width: 768px) {
   .ae2-page { padding-top: var(--aeh-b1-h, 44px); }
+}
+/* Mobile 480px : b1 encore plus petite */
+@media (max-width: 480px) {
+  .ae2-page { padding-top: var(--aeh-b1-h, 42px); }
 }
 .ae2-page *, .ae2-page *::before, .ae2-page *::after { box-sizing: border-box; }
 
@@ -709,9 +718,16 @@
 }
 .pc-appel-btn--candidater:hover { filter: brightness(1.1); transform: translateY(-1px); }
 .pc-appel-btn--bientot {
-  background: #e0e0e0;
+  background: rgba(233,170,32,0.12);
+  color: #9a6e00;
+  cursor: not-allowed;
+  border: 1.5px solid rgba(233,170,32,0.35);
+}
+.pc-appel-btn--termine {
+  background: rgba(100,100,100,0.08);
   color: #888;
   cursor: not-allowed;
+  border: 1.5px solid rgba(100,100,100,0.18);
 }
 
 /* ── Dark mode ── */
@@ -783,4 +799,251 @@
 }
 [data-theme='dark'] .ap-phone-wrap .PhoneInputInput {
   color: var(--sg-text);
+}
+
+/* ════════════════════════════════════════════════════════════
+   RESPONSIVE COMPLET - Pages publiques établissement
+   Breakpoints : 1200 · 1024 · 900 · 768 · 600 · 480 · 360
+════════════════════════════════════════════════════════════ */
+
+/* ── 1200px : larges tablettes paysage ── */
+@media (max-width: 1200px) {
+  .ae2-container         { max-width: 100%; padding: 0 20px; }
+  .ae2-formations-grid   { grid-template-columns: repeat(2, 1fr); gap: 20px; }
+  .ae2-actu-grid         { grid-template-columns: repeat(2, 1fr); gap: 20px; }
+  .ae2-apropos-grid      { grid-template-columns: 1fr 1fr; gap: 20px; }
+  .pc-appels-grid        { grid-template-columns: repeat(2, 1fr); gap: 20px; }
+}
+
+/* ── 1024px : tablettes ── */
+@media (max-width: 1024px) {
+  .ae2-section           { padding: 56px 0; }
+  .ae2-section-head      { margin-bottom: 36px; }
+  .ae2-formations-grid   { grid-template-columns: repeat(2, 1fr); gap: 18px; }
+  .ae2-apropos-grid      { grid-template-columns: 1fr; }
+  .ae2-apropos-bloc--main { grid-column: auto; }
+  .ae2-galerie-grid      { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .ae2-stats-grid        { grid-template-columns: repeat(3, 1fr); }
+
+  /* Candidature form */
+  .ae2-section .ae2-container[style*="max-width: 760"] { max-width: 100% !important; }
+}
+
+/* ── 900px : petites tablettes ── */
+@media (max-width: 900px) {
+  .ae2-hero-arr          { width: 34px; height: 34px; }
+  .ae2-hero-arr--prev    { left: 8px; }
+  .ae2-hero-arr--next    { right: 8px; }
+  .ae2-hero-dots         { bottom: 18px; }
+  .ae2-formations-grid   { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .ae2-actu-grid         { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .pc-appels-grid        { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .ae2-cta-box           { flex-direction: column; align-items: flex-start; padding: 24px; gap: 14px; }
+  .ae2-cta-box > div     { min-width: unset; }
+}
+
+/* ── 768px : mobile paysage / petites tablettes portrait ── */
+@media (max-width: 768px) {
+  /* Hero */
+  .ae2-hero            { min-height: calc(100vh - 44px) !important; }
+  .ae2-hero--compact   { min-height: 150px; max-height: 200px; }
+  .ae2-hero-titre      { font-size: clamp(1.4rem, 4vw, 1.8rem) !important; }
+  .ae2-hero-sous       { font-size: 0.88rem !important; }
+  .ae2-hero-content    { padding: 0 16px; gap: 12px; }
+  .ae2-hero-arr        { display: none; } /* Swipe sur mobile, flèches inutiles */
+  .ae2-hero-dots       { bottom: 14px; gap: 6px; }
+  .ae2-hero-dot        { width: 8px; height: 8px; }
+
+  /* Sections */
+  .ae2-section         { padding: 40px 0; }
+  .ae2-section-head    { margin-bottom: 28px; }
+  .ae2-section-titre   { font-size: clamp(1.2rem, 4vw, 1.6rem); }
+  .ae2-section-sous    { font-size: 0.9rem; }
+  .ae2-section-barre   { margin-top: 12px; }
+
+  /* Grilles → 1 colonne */
+  .ae2-formations-grid { grid-template-columns: 1fr; gap: 16px; }
+  .ae2-actu-grid       { grid-template-columns: 1fr; gap: 16px; }
+  .ae2-apropos-grid    { grid-template-columns: 1fr; gap: 16px; }
+  .ae2-galerie-grid    { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .ae2-stats-grid      { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .pc-appels-grid      { grid-template-columns: 1fr; gap: 16px; }
+
+  /* Cards */
+  .ae2-formation-img   { height: 160px; }
+  .ae2-actu-img        { height: 150px; }
+  .ae2-formation-body,
+  .ae2-actu-body       { padding: 14px 16px 16px; }
+  .ae2-stat-card       { padding: 20px 14px; }
+  .ae2-stat-val        { font-size: 1.6rem; }
+  .ae2-stat-icon       { width: 44px; height: 44px; }
+
+  /* À propos */
+  .ae2-apropos-bloc    { padding: 20px 18px; }
+
+  /* Contact */
+  .ae2-contact-grid    { grid-template-columns: 1fr; gap: 12px; }
+  .ae2-cta-box         { flex-direction: column; align-items: flex-start; padding: 20px; gap: 12px; }
+  .ae2-cta-box > div   { min-width: unset; width: 100%; }
+
+  /* Page Banner */
+  .pgb                 { padding: 8px 0 10px; }
+  .pgb-titre           { font-size: 1rem; }
+
+  /* Appels candidature */
+  .pc-appel-card       { border-radius: 12px; }
+  .pc-appel-illu       { padding: 18px 16px 14px; }
+  .pc-appel-btn        { padding: 10px 16px; font-size: 0.84rem; }
+  .pc-appel-card .pc-appel-badge,
+  .pc-appel-card .pc-appel-titre,
+  .pc-appel-card .pc-appel-desc,
+  .pc-appel-card .pc-appel-dates,
+  .pc-appel-card .pc-appel-frais,
+  .pc-appel-card .pc-appel-btn { margin-left: 14px; margin-right: 14px; }
+
+  /* Boutons */
+  .ae2-btn             { font-size: 0.85rem; padding: 9px 18px; }
+  .ae2-btn--hero       { font-size: 0.9rem; padding: 10px 24px; }
+
+  /* Lightbox */
+  .ae2-lightbox-close  { top: 12px; right: 12px; width: 36px; height: 36px; }
+  .ae2-lightbox-img    { max-width: 96vw; }
+
+  /* Formulaire candidature : 2 colonnes → 1 */
+  .ae2-section form [style*="grid-template-columns: repeat(2"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── 600px : smartphones standard ── */
+@media (max-width: 600px) {
+  .ae2-container       { padding: 0 12px; }
+  .ae2-section         { padding: 32px 0; }
+
+  /* Hero plein écran, titre plus petit */
+  .ae2-hero-titre      { font-size: clamp(1.2rem, 5vw, 1.6rem) !important; }
+  .ae2-hero-content    { gap: 10px; }
+  .ae2-hero-dots       { bottom: 10px; }
+
+  /* Galerie 2 colonnes */
+  .ae2-galerie-grid    { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+
+  /* Stats 2 col */
+  .ae2-stats-grid      { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .ae2-stat-card       { padding: 16px 10px; }
+  .ae2-stat-val        { font-size: 1.4rem; }
+  .ae2-stat-icon       { width: 36px; height: 36px; }
+  .ae2-stat-lbl        { font-size: 0.65rem; }
+
+  /* Cards formations / actualités */
+  .ae2-formation-img   { height: 140px; }
+  .ae2-actu-img        { height: 130px; }
+
+  /* À propos */
+  .ae2-apropos-bloc    { padding: 16px 14px; }
+  .ae2-apropos-bloc p  { font-size: 0.9rem; }
+
+  /* Contact */
+  .ae2-contact-item    { padding: 14px; gap: 10px; }
+
+  /* CTA */
+  .ae2-cta-box         { padding: 16px; border-radius: 12px; }
+  .ae2-cta-box h3      { font-size: 1rem; }
+  .ae2-cta-box p       { font-size: 0.82rem; }
+  .ae2-cta-box .ae2-btn { width: 100%; justify-content: center; }
+
+  /* Page banner */
+  .pgb                 { padding: 6px 0 8px; }
+  .pgb-titre           { font-size: 0.95rem; }
+  .pgb-fil             { display: none; } /* Masquer fil sur petit mobile */
+
+  /* Appels candidature */
+  .pc-appels-grid      { gap: 12px; }
+  .pc-appel-illu       { padding: 14px 12px 12px; }
+
+  /* Formulaire candidature */
+  .ae2-section .ae2-container { max-width: 100% !important; }
+
+  /* Rich content tables → scroll */
+  .ae2-rich-content table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Buttons full width dans le formulaire */
+  .ae2-section form > div:last-child { flex-direction: column; }
+  .ae2-section form > div:last-child .ae2-btn { width: 100%; justify-content: center; }
+}
+
+/* ── 480px : petits smartphones ── */
+@media (max-width: 480px) {
+  .ae2-container       { padding: 0 10px; }
+
+  /* Hero encore plus compact */
+  .ae2-hero--compact   { min-height: 120px; max-height: 170px; }
+  .ae2-hero-titre      { font-size: clamp(1.1rem, 5.5vw, 1.4rem) !important; }
+
+  /* Galerie → 1 colonne */
+  .ae2-galerie-grid    { grid-template-columns: 1fr; gap: 8px; }
+
+  /* Stats → 1 colonne */
+  .ae2-stats-grid      { grid-template-columns: 1fr 1fr; }
+
+  /* Section head */
+  .ae2-section-titre   { font-size: clamp(1.1rem, 5vw, 1.4rem); }
+  .ae2-section-sous    { font-size: 0.85rem; }
+  .ae2-section-head    { margin-bottom: 20px; }
+
+  /* Cartes actualités : image plus petite */
+  .ae2-actu-img        { height: 110px; }
+  .ae2-actu-titre      { font-size: 0.92rem; }
+  .ae2-actu-extrait    { -webkit-line-clamp: 2; font-size: 0.8rem; }
+
+  /* Page banner */
+  .pgb-back            { width: 28px; height: 28px; }
+
+  /* Appels : illustration plus petite */
+  .pc-appel-illu       { padding: 12px 10px; }
+  .pc-appel-titre      { font-size: 0.95rem; }
+  .pc-appel-btn        { font-size: 0.82rem; padding: 9px 12px; }
+  .pc-appel-card .pc-appel-badge,
+  .pc-appel-card .pc-appel-titre,
+  .pc-appel-card .pc-appel-desc,
+  .pc-appel-card .pc-appel-dates,
+  .pc-appel-card .pc-appel-frais,
+  .pc-appel-card .pc-appel-btn { margin-left: 12px; margin-right: 12px; }
+}
+
+/* ── 360px : très petits écrans ── */
+@media (max-width: 360px) {
+  .ae2-container         { padding: 0 8px; }
+  .ae2-hero--compact     { min-height: 100px; max-height: 150px; }
+  .ae2-btn               { font-size: 0.8rem; padding: 8px 14px; }
+  .ae2-btn--hero         { font-size: 0.82rem; padding: 8px 18px; }
+  .ae2-formation-body,
+  .ae2-actu-body         { padding: 10px 12px 12px; }
+  .ae2-formation-titre,
+  .ae2-actu-titre        { font-size: 0.88rem; }
+  .ae2-stat-val          { font-size: 1.2rem; }
+  .ae2-stats-grid        { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ae2-stat-card         { padding: 12px 8px; }
+  .ae2-apropos-bloc      { padding: 12px 10px; border-radius: 10px; }
+  .ae2-cta-box           { padding: 12px; }
+  .pc-appel-illu         { padding: 10px 8px; }
+  .pc-appels-grid        { gap: 10px; }
+}
+
+/* ── Préférence mouvement réduit ── */
+@media (prefers-reduced-motion: reduce) {
+  .ae2-hero-slide        { transition: none; }
+  .ae2-formation-card,
+  .ae2-actu-card,
+  .ae2-galerie-item img,
+  .ae2-stat-card         { transition: none; }
+}
+
+/* ── Touch : désactiver hover sur mobile ── */
+@media (hover: none) {
+  .ae2-formation-card:hover,
+  .ae2-actu-card:hover,
+  .ae2-stat-card:hover   { transform: none; box-shadow: none; }
+  .ae2-galerie-item:hover img { transform: none; }
+  .ae2-galerie-item:hover .ae2-galerie-overlay { background: rgba(0,107,60,0); }
 }

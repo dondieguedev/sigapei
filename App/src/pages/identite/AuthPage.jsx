@@ -84,14 +84,16 @@ export default function AuthPage() {
   const notify = useNotify()
   const navigate = useNavigate()
   const location = useLocation()
-  usePageTitle('Connexion')
+
+  /* ── Contexte établissement (logo + bouton retour dynamiques) ── */
+  const etab = useContexteEtablissement(location)
+
+  usePageTitle(etab?.nom ? `Connexion - ${etab.nom}` : 'Connexion')
+
   useEffect(() => {
     document.body.classList.add('page-public-recaptcha')
     return () => document.body.classList.remove('page-public-recaptcha')
   }, [])
-
-  /* ── Contexte établissement (logo + bouton retour dynamiques) ── */
-  const etab = useContexteEtablissement(location)
 
   // L'URL /login#recuperer ouvre directement le parcours de recuperation
   const mode = location.hash === '#recuperer' ? 'recover' : 'login'

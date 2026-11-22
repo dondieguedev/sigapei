@@ -78,6 +78,9 @@ Route::prefix('v1')->group(function () {
     // Ajout d'une piece : secretaire ou le service lui-meme (interne)
     Route::post('/candidatures/{uuid}/pieces-justificatives', [PieceJustificativeController::class, 'store'])
         ->middleware('role:administrateur,personnel');
+    // Téléchargement/visualisation d'une pièce
+    Route::get('/pieces-justificatives/{pieceUuid}/telecharger', [PieceJustificativeController::class, 'telecharger'])
+        ->middleware('role:administrateur,personnel,enseignant');
 
     // --- Tests d'admission ---
     // Saisie des notes : jury enseignant ou directeur
