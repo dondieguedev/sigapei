@@ -1,0 +1,83 @@
+/* ═══════════════════════════════════════════════════════════
+   AppFooter - Pied de page interne collé en bas
+═══════════════════════════════════════════════════════════ */
+
+.apf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 8px 20px;
+  border-top: 1px solid var(--sg-border, #e2e8f0);
+  background: var(--sg-surface, #fff);
+  font-size: 0.72rem;
+  color: var(--sg-text-muted, #94a3b8);
+  line-height: 1.4;
+  /* ── Clé : colle au bas sans sortir de l'écran ── */
+  flex-shrink: 0;
+  margin-top: auto;
+  /* Bordure gauche verte pour marquer la fin */
+  border-left: 3px solid var(--primary, #006B3C);
+}
+
+.apf-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.apf-app {
+  font-weight: 700;
+  color: var(--sg-text, #1a2a1e);
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+}
+
+.apf-etab {
+  color: var(--primary, #006B3C);
+  font-weight: 600;
+  font-size: 0.72rem;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.apf-sep {
+  color: var(--sg-border, #e2e8f0);
+  font-size: 0.8rem;
+}
+
+.apf-right {
+  font-size: 0.68rem;
+  color: var(--sg-text-muted, #94a3b8);
+  text-align: right;
+  /* Tronquer si trop long */
+  max-width: 400px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 768px) {
+  .apf          { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .apf-right    { display: none; } /* Masquer la description longue sur mobile */
+  .apf-etab     { max-width: 180px; }
+}
+
+@media (max-width: 400px) {
+  .apf { padding: 6px 12px; }
+}
+
+/* ── Dark mode ── */
+[data-theme='dark'] .apf {
+  background: var(--sg-surface);
+  border-color: var(--sg-border);
+  color: var(--sg-text-muted);
+  border-left-color: #4ade80;
+}
+[data-theme='dark'] .apf-app  { color: var(--sg-text); }
+[data-theme='dark'] .apf-etab { color: #4ade80; }
+[data-theme='dark'] .apf-sep  { color: var(--sg-border); }

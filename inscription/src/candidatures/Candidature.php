@@ -18,6 +18,7 @@ class Candidature extends Model
     protected $fillable = [
         'uuid',
         'tenant_id',
+        'appel_uuid',       // lien vers l'appel à candidature
         'nom',
         'prenom',
         'date_naissance',
@@ -25,7 +26,10 @@ class Candidature extends Model
         'email',
         'telephone',
         'adresse',
-        'classe_visee_id',
+        'type_inscription',
+        'niveau_precedent',
+        'etablissement_precedent',
+        'classe_visee_id',  // nullable - résolu par le backend après admission
         'statut',
         'date_soumission',
         'motif_rejet',

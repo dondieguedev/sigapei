@@ -105,4 +105,12 @@ export const inscriptionService = {
     const r = await http.delete(`/appels-candidatures/${uuid}`)
     return r?.donnees ?? r?.data ?? r
   },
+
+  /**
+   * Obtenir l'URL temporaire signée d'une pièce justificative
+   */
+  urlPiece: async (pieceUuid) => {
+    const r = await http.get(`/pieces-justificatives/${pieceUuid}/telecharger`)
+    return r?.donnees ?? r?.data ?? r
+  },
 }

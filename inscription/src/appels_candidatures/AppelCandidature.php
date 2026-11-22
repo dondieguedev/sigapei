@@ -40,6 +40,8 @@ class AppelCandidature extends Model
         'pieces_fournir',
         'statut',
         'places_disponibles',
+        'classe_visee_id',
+        'classe_uuid',
     ];
 
     protected $casts = [

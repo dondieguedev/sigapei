@@ -3,7 +3,7 @@
  *
  * Comportement unifié :
  *   - mode "slider" (page Présentation) : carousel plein écran
- *   - mode "page"   (autres pages)      : carousel compact — MÊME logique de défilement,
+ *   - mode "page"   (autres pages)      : carousel compact - MÊME logique de défilement,
  *     mais hauteur réduite et titre de page affiché en overlay.
  *     Si un seul slide → fond statique. Si plusieurs → défilement automatique + flèches + dots.
  *
@@ -67,7 +67,7 @@ export default function AccueilHero({
   const { slide, aller, allerVers } = useCarousel(hero.length, hero.length > 1)
 
   /* ══════════════════════════════════════════
-     MODE SLIDER — plein écran (Présentation)
+     MODE SLIDER - plein écran (Présentation)
   ══════════════════════════════════════════ */
   if (isSliderMode) {
     if (hero.length === 0) {
@@ -140,7 +140,7 @@ export default function AccueilHero({
   }
 
   /* ══════════════════════════════════════════
-     MODE PAGE — bannière compacte
+     MODE PAGE - bannière compacte
      Même carousel que slider, hauteur réduite.
      Le titre de la page est affiché en overlay.
   ══════════════════════════════════════════ */

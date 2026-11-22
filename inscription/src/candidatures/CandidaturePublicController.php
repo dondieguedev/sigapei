@@ -59,20 +59,24 @@ class CandidaturePublicController extends Controller
 
         // 2. Valider les données de candidature
         $validated = $request->validate([
-            'appel_uuid'      => 'nullable|uuid',
-            'nom'             => 'required|string|max:100',
-            'prenom'          => 'required|string|max:100',
-            'date_naissance'  => 'required|date',
-            'sexe'            => 'nullable|string|in:M,F',
-            'email'           => 'nullable|email|max:150',
-            'telephone'       => 'nullable|string|max:50',
-            'adresse'         => 'nullable|string|max:255',
-            'classe_visee_id' => 'nullable|integer',
-            'parent_nom'      => 'nullable|string|max:100',
-            'parent_prenom'   => 'nullable|string|max:100',
-            'parent_telephone'=> 'nullable|string|max:50',
-            'parent_email'    => 'nullable|email|max:150',
-            'parent_lien'     => 'nullable|string|max:50',
+            'appel_uuid'              => 'nullable|uuid',
+            'nom'                     => 'required|string|max:100',
+            'prenom'                  => 'required|string|max:100',
+            'date_naissance'          => 'nullable|date',
+            'sexe'                    => 'nullable|string|in:M,F',
+            'email'                   => 'nullable|email|max:150',
+            'telephone'               => 'nullable|string|max:50',
+            'adresse'                 => 'nullable|string|max:255',
+            'type_inscription'        => 'nullable|string|max:50',
+            'niveau_precedent'        => 'nullable|string|max:150',
+            'etablissement_precedent' => 'nullable|string|max:150',
+            'classe_visee_id'         => 'nullable|integer',
+            'parent_nom'              => 'nullable|string|max:100',
+            'parent_prenom'           => 'nullable|string|max:100',
+            'parent_telephone'        => 'nullable|string|max:50',
+            'parent_email'            => 'nullable|email|max:150',
+            'parent_lien'             => 'nullable|string|max:50',
+            'captcha_token'           => 'nullable|string',
         ]);
 
         try {

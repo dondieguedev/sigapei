@@ -13,8 +13,8 @@ class AppelCandidatureController extends Controller
         private AppelCandidatureService $service,
     ) {}
 
-    public function index(Request $request): JsonResponse
-    {
+    public function index(Request $request): JsonResponse    {
+
         $filtres = $request->only(['cycle', 'statut', 'annee_scolaire']);
         $appels = $this->service->lister($filtres);
 
@@ -24,8 +24,8 @@ class AppelCandidatureController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
-    {
+    public function store(Request $request): JsonResponse    {
+
         $donnees = $request->validate([
             'cycle'                 => ['required', Rule::in(['maternelle', 'primaire', 'secondaire', 'universitaire'])],
             'annee_scolaire'        => ['nullable', 'string', 'max:20'],
@@ -38,6 +38,8 @@ class AppelCandidatureController extends Controller
             'devise'                => ['nullable', 'string', 'max:10'],
             'places_disponibles'    => ['nullable', 'integer', 'min:1'],
             'statut'                => ['sometimes', Rule::in(['brouillon', 'ouvert', 'ferme', 'termine', 'annule'])],
+            'classe_visee_id'       => ['nullable', 'integer'],
+            'classe_uuid'           => ['nullable', 'string', 'max:36'],
 
             // Cibles par cycle
             'groupe_id'             => ['nullable', 'integer'],
@@ -56,12 +58,16 @@ class AppelCandidatureController extends Controller
             'filiere_complete'      => ['nullable', 'string', 'max:255'],
 
             // Listes dynamiques
-            'criteres_eligibilite'  => ['nullable', 'array'],
-            'criteres_eligibilite.*.label' => ['required_with:criteres_eligibilite', 'string'],
-            'criteres_eligibilite.*.type'  => ['required_with:criteres_eligibilite', 'string'],
-            
-            'pieces_fournir'        => ['nullable', 'array'],
-            'pieces_fournir.*.libelle' => ['required_with:pieces_fournir', 'string'],
+            'criteres_eligibilite'           => ['nullable', 'array'],
+            'criteres_eligibilite.*'          => ['array'],
+            'criteres_eligibilite.*.type'     => ['nullable', 'string'],
+            'criteres_eligibilite.*.label'    => ['nullable', 'string'],
+
+            'pieces_fournir'                  => ['nullable', 'array'],
+            'pieces_fournir.*'                => ['array'],
+            'pieces_fournir.*.libelle'        => ['nullable', 'string'],
+            'pieces_fournir.*.format'         => ['nullable', 'string'],
+            'pieces_fournir.*.obligatoire'    => ['nullable', 'boolean'],
         ]);
 
         $appel = $this->service->creer($donnees);
@@ -73,8 +79,8 @@ class AppelCandidatureController extends Controller
         ], 201);
     }
 
-    public function show(string $uuid): JsonResponse
-    {
+    public function show(string $uuid): JsonResponse  {
+
         $appel = $this->service->trouverParUuid($uuid);
 
         return response()->json([
@@ -83,8 +89,8 @@ class AppelCandidatureController extends Controller
         ]);
     }
 
-    public function update(Request $request, string $uuid): JsonResponse
-    {
+    public function update(Request $request, string $uuid): JsonResponse    {
+
         $donnees = $request->validate([
             'cycle'                 => ['sometimes', Rule::in(['maternelle', 'primaire', 'secondaire', 'universitaire'])],
             'annee_scolaire'        => ['sometimes', 'nullable', 'string', 'max:20'],
@@ -97,6 +103,8 @@ class AppelCandidatureController extends Controller
             'devise'                => ['sometimes', 'nullable', 'string', 'max:10'],
             'places_disponibles'    => ['sometimes', 'nullable', 'integer', 'min:1'],
             'statut'                => ['sometimes', Rule::in(['brouillon', 'ouvert', 'ferme', 'termine', 'annule'])],
+            'classe_visee_id'       => ['sometimes', 'nullable', 'integer'],
+            'classe_uuid'           => ['sometimes', 'nullable', 'string', 'max:36'],
 
             'groupe_id'             => ['sometimes', 'nullable', 'integer'],
             'groupe_nom'            => ['sometimes', 'nullable', 'string', 'max:100'],
@@ -113,8 +121,16 @@ class AppelCandidatureController extends Controller
             'niveau_etude'          => ['sometimes', 'nullable', 'string', 'max:100'],
             'filiere_complete'      => ['sometimes', 'nullable', 'string', 'max:255'],
 
-            'criteres_eligibilite'  => ['sometimes', 'nullable', 'array'],
-            'pieces_fournir'        => ['sometimes', 'nullable', 'array'],
+            'criteres_eligibilite'           => ['sometimes', 'nullable', 'array'],
+            'criteres_eligibilite.*'          => ['array'],
+            'criteres_eligibilite.*.type'     => ['nullable', 'string'],
+            'criteres_eligibilite.*.label'    => ['nullable', 'string'],
+
+            'pieces_fournir'                  => ['sometimes', 'nullable', 'array'],
+            'pieces_fournir.*'                => ['array'],
+            'pieces_fournir.*.libelle'        => ['nullable', 'string'],
+            'pieces_fournir.*.format'         => ['nullable', 'string'],
+            'pieces_fournir.*.obligatoire'    => ['nullable', 'boolean'],
         ]);
 
         $appel = $this->service->modifier($uuid, $donnees);
@@ -126,8 +142,8 @@ class AppelCandidatureController extends Controller
         ]);
     }
 
-    public function terminer(string $uuid): JsonResponse
-    {
+    public function terminer(string $uuid): JsonResponse   {
+
         $appel = $this->service->marquerTermine($uuid);
 
         return response()->json([
@@ -137,8 +153,8 @@ class AppelCandidatureController extends Controller
         ]);
     }
 
-    public function destroy(string $uuid): JsonResponse
-    {
+    public function destroy(string $uuid): JsonResponse    {
+        
         $this->service->supprimer($uuid);
 
         return response()->json([

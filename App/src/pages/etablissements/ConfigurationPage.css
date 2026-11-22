@@ -1067,3 +1067,37 @@
   .pac-img-row { flex-direction: column; }
   .pac-img-preview { width: 100%; height: 160px; }
 }
+
+/* ══ Responsive amélioré ══════════════════════════════════ */
+
+/* Onglets de section → scroll horizontal sur mobile */
+@media (max-width: 700px) {
+  .cfg-onglets {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .cfg-onglets::-webkit-scrollbar { display: none; }
+  .cfg-onglet { white-space: nowrap; flex-shrink: 0; }
+}
+
+/* Modale → quasi plein écran sur très petit mobile */
+@media (max-width: 400px) {
+  .cfg-modale-fond { padding: 4px; align-items: flex-end; }
+  .cfg-modale      { border-radius: 16px 16px 0 0; max-height: 92dvh; }
+}
+
+/* Grilles internes → 1 col sur mobile */
+@media (max-width: 540px) {
+  .pac-fields           { grid-template-columns: 1fr !important; }
+  .pac-stat-item        { grid-template-columns: 1fr !important; }
+  .pac-img-row          { flex-direction: column; }
+  .pac-liste .pac-item  { flex-direction: column; gap: 12px; }
+  .pac-galerie-grid     { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 360px) {
+  .pac-galerie-grid { grid-template-columns: 1fr; }
+  .cfg-modale-corps { padding: 12px; }
+}

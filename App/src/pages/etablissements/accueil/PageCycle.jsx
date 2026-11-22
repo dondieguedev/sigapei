@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { GraduationCap, CalendarDays, Clock, Users } from 'lucide-react'
+import {
+  GraduationCap, CalendarDays, Clock, Users,
+  CheckCircle2, FileText, Paperclip,
+} from 'lucide-react'
 import AccueilHero from '../../../components/etablissements/AccueilHero'
 import CycleIllustration from '../../../components/etablissements/CycleIllustration'
 import AppelIllustration from '../../../components/etablissements/AppelIllustration'
@@ -8,6 +11,7 @@ import PageBanner from '../../../components/etablissements/PageBanner'
 import { useAccueil } from './AccueilLayout'
 import { appelsPublicsService } from '../../../services/inscription/appelsPublics.service'
 import usePageTitle from '../../../hooks/commun/usePageTitle'
+import './PageCycle.css'
 
 const CYCLE_LABELS = {
   maternelle:    'Maternelle',
@@ -18,10 +22,15 @@ const CYCLE_LABELS = {
 
 function datesFr(iso) {
   if (!iso) return '-'
-  return new Date(iso).toLocaleDateString('fr-FR', {
-    day: '2-digit', month: 'long', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
+  // Parser sans conversion UTC→local pour éviter le décalage horaire
+  const normalized = iso.replace(' ', 'T').replace(/Z$/, '').slice(0, 16) // "2026-11-19T12:31"
+  const [datePart, timePart] = normalized.split('T')
+  if (!datePart) return iso
+  const [year, month, day] = datePart.split('-')
+  const moisFr = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre']
+  const moisLabel = moisFr[parseInt(month, 10) - 1] ?? month
+  const heure = timePart ? ` à ${timePart}` : ''
+  return `${parseInt(day, 10)} ${moisLabel} ${year}${heure}`
 }
 
 function statutAppel(appel) {
@@ -31,17 +40,120 @@ function statutAppel(appel) {
   const s     = appel.statut
 
   if (s === 'termine' || s === 'annule') return 'termine'
-  if (s === 'ouvert') {
-    if (fin && now > fin) return 'termine'
-    return 'ouvert'
-  }
-  if (s === 'brouillon' || s === 'planifie') {
-    if (debut && now >= debut) return 'ouvert'
-    return 'bientot'
-  }
-  if (debut && fin && now >= debut && now <= fin) return 'ouvert'
+  if (fin && now > fin) return 'termine'
   if (debut && now < debut) return 'bientot'
+  if (s === 'ouvert') return 'ouvert'
+  if ((s === 'brouillon' || s === 'planifie') && debut && now >= debut) return 'ouvert'
+  if (s === 'brouillon' || s === 'planifie') return 'bientot'
   return 'termine'
+}
+
+/* ── Rendu lisible de la VALEUR d'un critère ── */
+function renderCritereValeur(critere) {
+  // Le backend peut renvoyer la valeur sous différents champs
+  const v =
+    critere.valeur ??
+    critere.value ??
+    critere.valeurs ??
+    critere.plage ??
+    critere.date_min ??
+    null
+
+  if (v === null || v === undefined || v === '') {
+    // fallback : afficher les champs utiles s'ils existent
+    const fallback = []
+    if (critere.type_inscription) fallback.push(critere.type_inscription)
+    if (critere.date_naissance_min || critere.date_naissance_max) {
+      fallback.push(
+        `${critere.date_naissance_min ?? '?'} → ${critere.date_naissance_max ?? '?'}`
+      )
+    }
+    if (critere.age_min != null || critere.age_max != null) {
+      fallback.push(`${critere.age_min ?? '?'} – ${critere.age_max ?? '?'} ans`)
+    }
+    if (fallback.length) return fallback.join(' • ')
+    return null
+  }
+
+  // Tableau de valeurs
+  if (Array.isArray(v)) {
+    return v
+      .map((x) => (typeof x === 'object' ? JSON.stringify(x) : String(x)))
+      .join(' • ')
+  }
+  // Objet { min, max }
+  if (typeof v === 'object') {
+    if ('min' in v || 'max' in v) return `${v.min ?? '?'} → ${v.max ?? '?'}`
+    if ('debut' in v || 'fin' in v) return `${v.debut ?? '?'} → ${v.fin ?? '?'}`
+    return Object.entries(v).map(([k, val]) => `${k}: ${val}`).join(' • ')
+  }
+  return String(v)
+}
+
+/* ── Bloc critères (libellé + valeur) ── */
+function CriteresList({ criteres }) {
+  if (!Array.isArray(criteres) || criteres.length === 0) return null
+
+  return (
+    <div className="pc-appel-bloc">
+      <h4 className="pc-appel-bloc-titre">
+        <CheckCircle2 size={14} /> Critères d'éligibilité
+      </h4>
+      <ul className="pc-appel-liste">
+        {criteres.map((c, i) => {
+          const valeur = renderCritereValeur(c)
+          return (
+            <li key={i}>
+              <span className="pc-critere-libelle">{c.label ?? c.type ?? 'Critère'}</span>
+              {valeur && (
+                <span className="pc-critere-valeur">
+                  <strong>{valeur}</strong>
+                </span>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+/* ── Bloc pièces (libellé + format + obligatoire) ── */
+function PiecesList({ pieces }) {
+  if (!Array.isArray(pieces) || pieces.length === 0) return null
+
+  return (
+    <div className="pc-appel-bloc">
+      <h4 className="pc-appel-bloc-titre">
+        <Paperclip size={14} /> Pièces à fournir
+      </h4>
+      <ul className="pc-appel-liste">
+        {pieces.map((p, i) => (
+          <li key={i}>
+            <span className="pc-piece-libelle">
+              <FileText size={12} />
+              {p.libelle ?? 'Document'}
+              <span
+                className={`pc-piece-tag ${
+                  p.obligatoire
+                    ? 'pc-piece-tag--obligatoire'
+                    : 'pc-piece-tag--facultatif'
+                }`}
+              >
+                {p.obligatoire ? 'Obligatoire' : 'Facultatif'}
+              </span>
+            </span>
+            {p.format && (
+              <span className="pc-piece-meta">Format : {p.format}</span>
+            )}
+            {p.description && (
+              <span className="pc-piece-meta">{p.description}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
 }
 
 /* ── Skeleton card ── */
@@ -92,7 +204,7 @@ export default function PageCycle() {
       .finally(() => { if (!annule) setLoading(false) })
 
     return () => { annule = true }
-  }, [slug, cycle]) // ← uniquement slug et cycle, pas data?.uuid
+  }, [slug, cycle])
 
   return (
     <>
@@ -124,7 +236,6 @@ export default function PageCycle() {
             <div className="ae2-section-barre" />
           </div>
 
-          {/* Skeletons pendant le chargement */}
           {loading ? (
             <div className="pc-appels-grid">
               <SkeletonCard />
@@ -139,12 +250,16 @@ export default function PageCycle() {
           ) : (
             <div className="pc-appels-grid">
               {appels.map((appel, i) => {
-                const statut   = statutAppel(appel)
+                const statut    = statutAppel(appel)
                 const estOuvert = statut === 'ouvert'
                 return (
-                  <article key={appel.uuid ?? i} className={`pc-appel-card ${estOuvert ? 'pc-appel-card--ouvert' : 'pc-appel-card--bientot'}`}>
-
-                    {/* Illustration automatique selon le titre / cycle */}
+                  <article
+                    key={appel.uuid ?? i}
+                    className={`pc-appel-card ${
+                      estOuvert ? 'pc-appel-card--ouvert' : 'pc-appel-card--bientot'
+                    }`}
+                  >
+                    {/* Illustration + badge statut en haut à droite */}
                     <div className="pc-appel-illu">
                       <AppelIllustration
                         titre={appel.titre ?? ''}
@@ -152,13 +267,18 @@ export default function PageCycle() {
                         index={i}
                         size={100}
                       />
+                      <span
+                        className={`pc-appel-badge ${
+                          estOuvert ? 'pc-appel-badge--ouvert' : 'pc-appel-badge--bientot'
+                        }`}
+                      >
+                        {estOuvert ? '● Ouvert' : '○ Bientôt disponible'}
+                      </span>
                     </div>
 
-                    <div className={`pc-appel-badge ${estOuvert ? 'pc-appel-badge--ouvert' : 'pc-appel-badge--bientot'}`}>
-                      {estOuvert ? '● Ouvert' : '○ Bientôt disponible'}
-                    </div>
-
-                    <h3 className="pc-appel-titre">{appel.titre ?? `Appel - ${cycleLabel}`}</h3>
+                    <h3 className="pc-appel-titre">
+                      {appel.titre ?? `Appel - ${cycleLabel}`}
+                    </h3>
 
                     {appel.description && (
                       <p className="pc-appel-desc">{appel.description}</p>
@@ -177,9 +297,19 @@ export default function PageCycle() {
                       )}
                     </div>
 
+                    {/* Critères + valeurs */}
+                    <CriteresList criteres={appel.criteres_eligibilite} />
+
+                    {/* Pièces + format + obligatoire */}
+                    <PiecesList pieces={appel.pieces_fournir} />
+
                     {appel.est_payant && appel.montant && Number(appel.montant) > 0 && (
                       <p className="pc-appel-frais">
-                        Frais de dossier : <strong>{Number(appel.montant).toLocaleString('fr-FR')} {appel.devise ?? 'FCFA'}</strong>
+                        Frais de dossier :{' '}
+                        <strong>
+                          {Number(appel.montant).toLocaleString('fr-FR')}{' '}
+                          {appel.devise ?? 'FCFA'}
+                        </strong>
                       </p>
                     )}
 
@@ -191,9 +321,21 @@ export default function PageCycle() {
                       >
                         <Users size={15} /> Candidater
                       </button>
+                    ) : statut === 'bientot' ? (
+                      <span
+                        className="pc-appel-btn pc-appel-btn--bientot"
+                        aria-disabled="true"
+                        title={`Ouverture le ${datesFr(appel.date_debut)}`}
+                      >
+                        <Clock size={15} /> Pas encore ouvert
+                      </span>
                     ) : (
-                      <span className="pc-appel-btn pc-appel-btn--bientot" aria-disabled="true">
-                        <Clock size={15} /> Bientôt ouvert - {datesFr(appel.date_debut)}
+                      <span
+                        className="pc-appel-btn pc-appel-btn--termine"
+                        aria-disabled="true"
+                        title="Cet appel est clôturé"
+                      >
+                        <Clock size={15} /> Clôturé
                       </span>
                     )}
                   </article>

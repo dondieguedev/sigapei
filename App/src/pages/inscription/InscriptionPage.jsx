@@ -1,30 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import {
-  UserCheck,
-  CheckCircle,
-  XCircle,
-  Search,
-  RefreshCw,
-  Plus,
-  Megaphone,
-  Calendar,
-  CalendarDays,
-  Clock,
-  Layers,
-  FileText,
-  DollarSign,
-  Edit2,
-  Trash2,
-  AlertTriangle,
-  StopCircle,
-  Users,
-  CheckCircle2,
-  School,
-  BookOpen,
-  GraduationCap,
-  Building2,
-  ChevronRight,
+  UserCheck, CheckCircle, XCircle, Search, RefreshCw, Plus,
+  Megaphone, Calendar, CalendarDays, Clock, Layers, FileText,
+  DollarSign, Edit2, Trash2, AlertTriangle, StopCircle, Users,
+  CheckCircle2, School, BookOpen, GraduationCap, Building2,
+  ChevronRight, Eye, Phone, Mail, MapPin, User, Paperclip,
 } from 'lucide-react'
 
 import { lienEtablissement } from '../../lib/etablissements/subdomain'
@@ -38,6 +19,7 @@ import { useNotify } from '../../context/commun/NotifyContext'
 
 import ModuleLayout from '../../components/commun/ModuleLayout'
 import Loader from '../../components/commun/Loader'
+import ConfirmDialog from '../../components/commun/ConfirmDialog'
 import ModalAppelCandidature from './ModalAppelCandidature'
 
 import '../AdministrationPrincipale/admin.css'
@@ -218,9 +200,18 @@ export default function InscriptionPage() {
   // --- Données Candidatures ---
   const [candidatures, setCandidatures] = useState([])
   const [chargementCandidatures, setChargementCandidatures] = useState(true)
+  const [erreurCandidatures, setErreurCandidatures] = useState('')
   const [filtreStatutCandidature, setFiltreStatutCandidature] = useState('tous')
   const [rechercheCandidature, setRechercheCandidature] = useState('')
   const [actionLoadingCandidature, setActionLoadingCandidature] = useState(null)
+
+  // ── Modales candidatures ──
+  const [candidatureDetail, setCandidatureDetail]       = useState(null) // modal détails
+  const [confirmValidation, setConfirmValidation]       = useState(null) // { uuid, nom }
+  const [confirmRejet, setConfirmRejet]                 = useState(null) // { uuid, nom }
+  const [motifRejet, setMotifRejet]                     = useState('')
+  const [confirmTerminer, setConfirmTerminer]           = useState(null) // { uuid }
+  const [confirmSupprimer, setConfirmSupprimer]         = useState(null) // { uuid }
 
   // Charger les appels
   const chargerAppels = useCallback(async () => {
@@ -298,51 +289,70 @@ export default function InscriptionPage() {
   }
 
   const handleTerminerAppel = async (uuid) => {
-    if (!window.confirm('Confirmez-vous la clôture définitive de cet appel à candidature ?')) return
-    try {
-      await inscriptionService.terminerAppel(uuid)
-      await chargerAppels()
-    } catch (err) {
-      notify.fromError(err)
-    }
+    setConfirmTerminer({ uuid })
   }
 
   const handleSupprimerAppel = async (uuid) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cet appel à candidature ?')) return
-    try {
-      await inscriptionService.supprimerAppel(uuid)
-      await chargerAppels()
-    } catch (err) {
-      notify.fromError(err)
-    }
+    setConfirmSupprimer({ uuid })
   }
 
   // Actions candidatures
-  const handleValiderCandidature = async (uuid) => {
-    if (!window.confirm('Confirmer la validation de cette candidature ?')) return
-    setActionLoadingCandidature(uuid)
+  const handleValiderCandidature = (c) => {
+    setConfirmValidation({ uuid: c.uuid, nom: `${c.nom} ${c.prenom}` })
+  }
+
+  const handleRejeterCandidature = (c) => {
+    setMotifRejet('')
+    setConfirmRejet({ uuid: c.uuid, nom: `${c.nom} ${c.prenom}` })
+  }
+
+  const confirmerValidation = async () => {
+    if (!confirmValidation) return
+    setActionLoadingCandidature(confirmValidation.uuid)
     try {
-      await inscriptionService.validerCandidature(uuid)
+      await inscriptionService.validerCandidature(confirmValidation.uuid)
+      notify.success('Candidature validée', `L'admission de ${confirmValidation.nom} a été confirmée.`)
       await chargerCandidatures()
     } catch (err) {
       notify.fromError(err)
     } finally {
       setActionLoadingCandidature(null)
+      setConfirmValidation(null)
     }
   }
 
-  const handleRejeterCandidature = async (uuid) => {
-    const motif = window.prompt('Veuillez saisir le motif du rejet :')
-    if (!motif) return
-    setActionLoadingCandidature(uuid)
+  const confirmerRejet = async () => {
+    if (!confirmRejet || !motifRejet.trim()) return
+    setActionLoadingCandidature(confirmRejet.uuid)
     try {
-      await inscriptionService.rejeterCandidature(uuid, motif)
+      await inscriptionService.rejeterCandidature(confirmRejet.uuid, motifRejet.trim())
+      notify.success('Candidature rejetée', `Le dossier de ${confirmRejet.nom} a été rejeté.`)
       await chargerCandidatures()
     } catch (err) {
       notify.fromError(err)
     } finally {
       setActionLoadingCandidature(null)
+      setConfirmRejet(null)
+      setMotifRejet('')
     }
+  }
+
+  const confirmerTerminer = async () => {
+    if (!confirmTerminer) return
+    try {
+      await inscriptionService.terminerAppel(confirmTerminer.uuid)
+      await chargerAppels()
+    } catch (err) { notify.fromError(err) }
+    finally { setConfirmTerminer(null) }
+  }
+
+  const confirmerSupprimer = async () => {
+    if (!confirmSupprimer) return
+    try {
+      await inscriptionService.supprimerAppel(confirmSupprimer.uuid)
+      await chargerAppels()
+    } catch (err) { notify.fromError(err) }
+    finally { setConfirmSupprimer(null) }
   }
 
   const base = lienEtablissement(slug, '/inscription')
@@ -386,16 +396,16 @@ export default function InscriptionPage() {
 
   const formaterDateHeure = (dStr) => {
     if (!dStr) return '-'
-    const d = new Date(dStr)
-    return isNaN(d.getTime())
-      ? dStr
-      : d.toLocaleDateString('fr-FR', {
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        })
+    // Parser manuellement pour éviter la conversion UTC→local (+1h)
+    // Format attendu : "2026-11-19T12:31:00" ou "2026-11-19 12:31:00"
+    const normalized = dStr.replace(' ', 'T').replace(/Z$/, '').slice(0, 16) // "2026-11-19T12:31"
+    const [datePart, timePart] = normalized.split('T')
+    if (!datePart) return dStr
+    const [year, month, day] = datePart.split('-')
+    const moisFr = ['jan.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.']
+    const moisLabel = moisFr[parseInt(month, 10) - 1] ?? month
+    const heure = timePart ? ` à ${timePart}` : ''
+    return `${parseInt(day, 10)} ${moisLabel} ${year}${heure}`
   }
 
   // Fil d'ariane
@@ -456,7 +466,7 @@ export default function InscriptionPage() {
           <div className="ap-page-head">
             <div>
               <h2 className="ap-page-title">
-                Appels à candidatures {cycleParam ? `• ${CYCLE_LABELS[cycleParam]}` : ''}
+                Appels à candidatures {cycleParam ? `${CYCLE_LABELS[cycleParam]}` : ''}
               </h2>
               <p className="ap-page-sub">
                 Campagnes de recrutement ouvertes aux futurs apprenants et critères d'admission
@@ -554,7 +564,9 @@ export default function InscriptionPage() {
             <div className="appel-grid">
               {filteredAppels.map((appel) => {
                 const criteres = Array.isArray(appel.criteres_eligibilite) ? appel.criteres_eligibilite : []
-                const pieces = Array.isArray(appel.pieces_a_fournir) ? appel.pieces_a_fournir : []
+                const pieces = Array.isArray(appel.pieces_a_fournir) ? appel.pieces_a_fournir
+                  : Array.isArray(appel.pieces_fournir) ? appel.pieces_fournir
+                  : []
                 const critereAdmission = criteres.find((c) => c.type === 'type_inscription')
 
                 return (
@@ -669,15 +681,14 @@ export default function InscriptionPage() {
         </div>
       )
     }
-
-    // Vue 2 : Dossiers de candidature
+   
     if (section === 'candidatures') {
       return (
         <div>
           <div className="ap-page-head">
             <div>
               <h2 className="ap-page-title">
-                Dossiers de candidature {cycleParam ? `• ${CYCLE_LABELS[cycleParam]}` : ''}
+                Dossiers de candidature {cycleParam ? `${CYCLE_LABELS[cycleParam]}` : ''}
               </h2>
               <p className="ap-page-sub">
                 Instruction des dossiers déposés et validation des admissions
@@ -762,7 +773,15 @@ export default function InscriptionPage() {
                             <div style={{ display: 'inline-flex', gap: 8, justifyContent: 'flex-end' }}>
                               <button
                                 type="button"
-                                onClick={() => handleValiderCandidature(c.uuid)}
+                                onClick={() => setCandidatureDetail(c)}
+                                className="btn-action"
+                                title="Voir les détails"
+                              >
+                                <Eye size={15} /> Détails
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleValiderCandidature(c)}
                                 disabled={actionLoadingCandidature === c.uuid}
                                 className="btn-action btn-action--success"
                                 title="Valider l'admission"
@@ -771,7 +790,7 @@ export default function InscriptionPage() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleRejeterCandidature(c.uuid)}
+                                onClick={() => handleRejeterCandidature(c)}
                                 disabled={actionLoadingCandidature === c.uuid}
                                 className="btn-action btn-action--danger"
                                 title="Rejeter"
@@ -780,7 +799,17 @@ export default function InscriptionPage() {
                               </button>
                             </div>
                           ) : (
-                            <span style={{ fontSize: '0.8rem', color: 'var(--sg-text-muted)' }}>Dossier traité</span>
+                            <div style={{ display: 'inline-flex', gap: 8, justifyContent: 'flex-end' }}>
+                              <button
+                                type="button"
+                                onClick={() => setCandidatureDetail(c)}
+                                className="btn-action"
+                                title="Voir les détails"
+                              >
+                                <Eye size={15} /> Détails
+                              </button>
+                              <span style={{ fontSize: '0.8rem', color: 'var(--sg-text-muted)', alignSelf: 'center' }}>Dossier traité</span>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -863,6 +892,223 @@ export default function InscriptionPage() {
         enCours={actionEnCoursAppel}
         cyclesDisponibles={cyclesDisponiblesIds}
         anneeActive={anneeActive}
+      />
+
+      {/* ── Modale détails candidature ── */}
+      {candidatureDetail && (
+        <div className="cfg-modale-fond" role="dialog" aria-modal="true" onClick={() => setCandidatureDetail(null)}>
+          <div className="cfg-modale" style={{ maxWidth: 620 }} onClick={(e) => e.stopPropagation()}>
+            <div className="cfg-modale-tete">
+              <h3>Dossier de candidature</h3>
+              <button type="button" className="ap-drawer-close" onClick={() => setCandidatureDetail(null)} aria-label="Fermer">
+                <XCircle size={16} />
+              </button>
+            </div>
+            <div className="cfg-modale-corps" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+              {/* Statut */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span className={`status-pill status-pill--${candidatureDetail.statut}`} style={{ fontSize: '0.88rem', padding: '4px 14px' }}>
+                  {candidatureDetail.statut}
+                </span>
+                {candidatureDetail.motif_rejet && (
+                  <span style={{ fontSize: '0.82rem', color: '#c0392b', fontStyle: 'italic' }}>
+                    Motif : {candidatureDetail.motif_rejet}
+                  </span>
+                )}
+              </div>
+
+              {/* Identité candidat */}
+              <div className="ap-card" style={{ padding: 16 }}>
+                <p className="ap-label" style={{ marginBottom: 10, color: 'var(--primary,#047857)', fontWeight: 700 }}>
+                  <User size={14} style={{ verticalAlign: '-2px', marginRight: 5 }} />Identité du candidat
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {[
+                    ['Nom', candidatureDetail.nom],
+                    ['Prénom', candidatureDetail.prenom],
+                    ['Sexe', candidatureDetail.sexe === 'M' ? 'Masculin' : candidatureDetail.sexe === 'F' ? 'Féminin' : '-'],
+                    ['Date de naissance', candidatureDetail.date_naissance || '-'],
+                    ['Téléphone', candidatureDetail.telephone || '-'],
+                    ['Email', candidatureDetail.email || '-'],
+                    ['Adresse', candidatureDetail.adresse || '-'],
+                    ['Modalité d\'admission', candidatureDetail.type_inscription || '-'],
+                    ['Niveau précédent', candidatureDetail.niveau_precedent || '-'],
+                    ['Établissement précédent', candidatureDetail.etablissement_precedent || '-'],
+                  ].map(([label, val]) => val && val !== '-' ? (
+                    <div key={label}>
+                      <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--sg-text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: '0.88rem', fontWeight: 600 }}>{val}</p>
+                    </div>
+                  ) : null)}
+                </div>
+              </div>
+
+              {/* Parent / Tuteur */}
+              {(candidatureDetail.parent_nom || candidatureDetail.parent_telephone) && (
+                <div className="ap-card" style={{ padding: 16 }}>
+                  <p className="ap-label" style={{ marginBottom: 10, color: 'var(--primary,#047857)', fontWeight: 700 }}>
+                    <Users size={14} style={{ verticalAlign: '-2px', marginRight: 5 }} />Parent / Tuteur
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    {[
+                      ['Nom', candidatureDetail.parent_nom],
+                      ['Prénom', candidatureDetail.parent_prenom],
+                      ['Lien', candidatureDetail.parent_lien],
+                      ['Téléphone', candidatureDetail.parent_telephone],
+                      ['Email', candidatureDetail.parent_email],
+                    ].map(([label, val]) => val ? (
+                      <div key={label}>
+                        <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--sg-text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</p>
+                        <p style={{ margin: '2px 0 0', fontSize: '0.88rem', fontWeight: 600 }}>{val}</p>
+                      </div>
+                    ) : null)}
+                  </div>
+                </div>
+              )}
+
+              {/* Classe / Formation */}
+              <div className="ap-card" style={{ padding: 16 }}>
+                <p className="ap-label" style={{ marginBottom: 6, color: 'var(--primary,#047857)', fontWeight: 700 }}>
+                  <School size={14} style={{ verticalAlign: '-2px', marginRight: 5 }} />Formation visée
+                </p>
+                <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600 }}>
+                  {candidatureDetail.classe_visee?.nom ?? candidatureDetail.classe_nom ?? 'Non assignée'}
+                </p>
+                <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: 'var(--sg-text-muted)' }}>
+                  Soumis le {formaterDateHeure(candidatureDetail.date_soumission)}
+                </p>
+              </div>
+
+              {/* Pièces justificatives */}
+              {Array.isArray(candidatureDetail.pieces_justificatives) && candidatureDetail.pieces_justificatives.length > 0 && (
+                <div className="ap-card" style={{ padding: 16 }}>
+                  <p className="ap-label" style={{ marginBottom: 10, color: 'var(--primary,#047857)', fontWeight: 700 }}>
+                    <Paperclip size={14} style={{ verticalAlign: '-2px', marginRight: 5 }} />
+                    Pièces justificatives ({candidatureDetail.pieces_justificatives.length})
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {candidatureDetail.pieces_justificatives.map((p) => (
+                      <div key={p.uuid} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        gap: 10, padding: '8px 12px', borderRadius: 8,
+                        background: 'var(--sg-surface-2,#f8fafc)',
+                        border: '1px solid var(--sg-border,#e2e8f0)',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <FileText size={15} style={{ color: 'var(--primary,#047857)', flexShrink: 0 }} />
+                          <div style={{ minWidth: 0 }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {p.nom_original}
+                            </p>
+                            <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--sg-text-muted)' }}>
+                              {p.type} · {p.statut_validation ?? 'en attente'}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="ap-btn ap-btn--ghost ap-btn--sm"
+                          style={{ flexShrink: 0 }}
+                          onClick={async () => {
+                            try {
+                              const r = await inscriptionService.urlPiece(p.uuid)
+                              window.open(r?.url ?? r, '_blank', 'noopener')
+                            } catch {
+                              notify.error('Erreur', 'Impossible d\'accéder à ce fichier.')
+                            }
+                          }}
+                        >
+                          <Eye size={13} /> Voir
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            </div>
+            <div className="cfg-modale-pied">
+              {(candidatureDetail.statut === 'soumise' || candidatureDetail.statut === 'en_attente') && (
+                <>
+                  <button type="button" className="ap-btn ap-btn--danger"
+                    onClick={() => { setCandidatureDetail(null); handleRejeterCandidature(candidatureDetail) }}>
+                    <XCircle size={15} /> Rejeter
+                  </button>
+                  <button type="button" className="ap-btn"
+                    onClick={() => { setCandidatureDetail(null); handleValiderCandidature(candidatureDetail) }}>
+                    <CheckCircle size={15} /> Valider l'admission
+                  </button>
+                </>
+              )}
+              {!['soumise','en_attente'].includes(candidatureDetail.statut) && (
+                <button type="button" className="ap-btn ap-btn--ghost" onClick={() => setCandidatureDetail(null)}>Fermer</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Confirmation validation ── */}
+      <ConfirmDialog
+        open={!!confirmValidation}
+        tone="primary"
+        title="Valider l'admission"
+        message={`Confirmez-vous la validation de la candidature de ${confirmValidation?.nom} ? Cette action créera l'apprenant dans la scolarité.`}
+        confirmLabel="Valider l'admission"
+        cancelLabel="Annuler"
+        loading={actionLoadingCandidature === confirmValidation?.uuid}
+        onConfirm={confirmerValidation}
+        onCancel={() => setConfirmValidation(null)}
+      />
+
+      {/* ── Confirmation rejet avec motif ── */}
+      <ConfirmDialog
+        open={!!confirmRejet}
+        tone="danger"
+        title="Rejeter la candidature"
+        message={`Vous êtes sur le point de rejeter le dossier de ${confirmRejet?.nom}.`}
+        confirmLabel="Confirmer le rejet"
+        cancelLabel="Annuler"
+        loading={actionLoadingCandidature === confirmRejet?.uuid}
+        onConfirm={confirmerRejet}
+        onCancel={() => { setConfirmRejet(null); setMotifRejet('') }}
+      >
+        <div className="ap-field" style={{ marginTop: 12 }}>
+          <label className="ap-label" htmlFor="motif-rejet">Motif du rejet <span style={{ color: '#c0392b' }}>*</span></label>
+          <textarea
+            id="motif-rejet"
+            className="ap-textarea"
+            rows={3}
+            placeholder="Expliquez la raison du rejet (sera communiqué au candidat)…"
+            value={motifRejet}
+            onChange={(e) => setMotifRejet(e.target.value)}
+          />
+        </div>
+      </ConfirmDialog>
+
+      {/* ── Confirmation clôture appel ── */}
+      <ConfirmDialog
+        open={!!confirmTerminer}
+        tone="warning"
+        title="Clôturer l'appel à candidature"
+        message="Cette action est définitive. L'appel sera marqué comme terminé et aucune nouvelle candidature ne sera acceptée."
+        confirmLabel="Clôturer définitivement"
+        cancelLabel="Annuler"
+        onConfirm={confirmerTerminer}
+        onCancel={() => setConfirmTerminer(null)}
+      />
+
+      {/* ── Confirmation suppression appel ── */}
+      <ConfirmDialog
+        open={!!confirmSupprimer}
+        tone="danger"
+        title="Supprimer l'appel à candidature"
+        message="Cette suppression est irréversible. Toutes les candidatures associées seront perdues."
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        onConfirm={confirmerSupprimer}
+        onCancel={() => setConfirmSupprimer(null)}
       />
     </ModuleLayout>
   )

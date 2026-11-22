@@ -7,6 +7,7 @@ import {
 import { useAuth }            from '../../context/identite/AuthContext'
 import ThemeToggle            from './ThemeToggle'
 import NotificationBell       from './NotificationBell'
+import AppFooter              from './AppFooter'
 import { ENV }                from '../../config/commun/env'
 import { roleCodeOf }         from '../../config/identite/routes'
 import { lienEtablissement }  from '../../lib/etablissements/subdomain'
@@ -220,7 +221,10 @@ export default function PortailLayout() {
             </div>
           </div>
         </header>
-        <div className="pl-content"><Outlet /></div>
+        <div className="pl-content">
+          <div className="pl-content-inner"><Outlet /></div>
+          <AppFooter etabNom={etablissementNom} />
+        </div>
       </div>
     </div>
   )
