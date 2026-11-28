@@ -2,6 +2,7 @@ import {
   Body, Controller, Get, Param, Post, Query,
   Req, UseGuards, ParseUUIDPipe, HttpCode, HttpStatus,
 } from '@nestjs/common';
+import { AccesEncaissementGuard, InterneGuard } from '../common/guards/acces-encaissement.guard';
 import { Request } from 'express';
 import { EncaissementService } from './encaissement.service';
 import { ContexteAcces } from '../database/contexte';
@@ -51,6 +52,7 @@ class VerifierKkiapayBodyDto {
 }
 
 @Controller('etablissements/:etablissementUuid/encaissements')
+@UseGuards(AccesEncaissementGuard)
 export class EncaissementController {
   constructor(private readonly service: EncaissementService) {}
 
@@ -62,8 +64,9 @@ export class EncaissementController {
     @Body() body: InitierEncaissementBodyDto,
     @Req() req: Request,
   ) {
-    // TODO : remplacer par un guard JWT qui extrait l'acteur
+    // L'acteur vient du guard (JWT ou secret interne) ; le contexte RLS est borné à l'établissement du chemin.
     const ctx: ContexteAcces = { role: 'administrateur', etablissementUuid };
+    const acteurRole = String((req as unknown as Record<string, unknown>).roleCode ?? 'systeme');
     return this.service.initierEncaissement({
       etablissementUuid,
       agregateurCode: body.agregateurCode,
@@ -74,8 +77,8 @@ export class EncaissementController {
       objetUuid: body.objetUuid,
       urlRetour: body.urlRetour,
       payeur: body.payeur,
-      acteurUuid: (req as unknown as Record<string, unknown>).utilisateurUuid as string ?? 'system',
-      acteurRole: 'administrateur',
+      acteurUuid: ((req as unknown as Record<string, unknown>).utilisateurUuid as string | undefined) ?? null,
+      acteurRole,
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     }, ctx);
@@ -109,6 +112,7 @@ export class EncaissementController {
    * le backend vérifie avec le SDK Admin et met à jour l'encaissement.
    */
   @Post('kkiapay/verifier')
+  @UseGuards(InterneGuard)
   @HttpCode(HttpStatus.OK)
   async verifierKkiapay(
     @Param('etablissementUuid', ParseUUIDPipe) etablissementUuid: string,

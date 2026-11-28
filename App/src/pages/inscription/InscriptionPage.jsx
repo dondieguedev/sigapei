@@ -42,6 +42,17 @@ const CYCLE_ICONES = {
   universitaire: Building2,
 }
 
+const LIBELLES_STATUT_CANDIDATURE = {
+  soumise: 'Soumise',
+  en_attente: 'En attente',
+  en_attente_paiement: 'Paiement en attente',
+  validee: 'Validée',
+  rejetee: 'Rejetée',
+  expiree: 'Expirée',
+}
+const TRAITABLE = (c) => c.statut === 'soumise' || c.statut === 'en_attente'
+const LOT_MAX = 50
+
 const LIBELLES_STATUT = {
   en_cours: 'En cours',
   a_venir: 'À venir',
@@ -204,9 +215,18 @@ export default function InscriptionPage() {
   const [filtreStatutCandidature, setFiltreStatutCandidature] = useState('tous')
   const [rechercheCandidature, setRechercheCandidature] = useState('')
   const [actionLoadingCandidature, setActionLoadingCandidature] = useState(null)
+  const [filtreAppelCandidature, setFiltreAppelCandidature] = useState('')
+
+  // ── Sélection multiple et traitement par lot ──
+  const [selection, setSelection] = useState(() => new Set())
+  const [confirmLot, setConfirmLot] = useState(null) // 'valider' | 'rejeter'
+  const [motifLot, setMotifLot] = useState('')
+  const [lotEnCours, setLotEnCours] = useState(false)
+  const [resultatLot, setResultatLot] = useState(null)
 
   // ── Modales candidatures ──
   const [candidatureDetail, setCandidatureDetail]       = useState(null) // modal détails
+  const [loadingDetail, setLoadingDetail]               = useState(false)
   const [confirmValidation, setConfirmValidation]       = useState(null) // { uuid, nom }
   const [confirmRejet, setConfirmRejet]                 = useState(null) // { uuid, nom }
   const [motifRejet, setMotifRejet]                     = useState('')
@@ -235,14 +255,22 @@ export default function InscriptionPage() {
     setChargementCandidatures(true)
     setErreurCandidatures('')
     try {
-      const data = await inscriptionService.listerCandidatures()
-      setCandidatures(Array.isArray(data) ? data : data?.data ?? [])
+      const filtres = {}
+      if (cycleParam) filtres.cycle = cycleParam
+      if (filtreAppelCandidature) filtres.appel_uuid = filtreAppelCandidature
+      // Les dossiers « paiement en attente » / « expirés » ne figurent pas dans la file par défaut : on les demande explicitement.
+      if (['en_attente_paiement', 'expiree'].includes(filtreStatutCandidature)) filtres.statut = filtreStatutCandidature
+      const data = await inscriptionService.listerCandidatures(filtres)
+      const liste = Array.isArray(data) ? data : data?.data ?? []
+      setCandidatures(liste)
+      // Une sélection ne survit pas à un rechargement : on ne garde que les dossiers encore traitables.
+      setSelection((prev) => new Set([...prev].filter((u) => liste.some((c) => c.uuid === u && TRAITABLE(c)))))
     } catch (err) {
       notify.fromError(err)
     } finally {
       setChargementCandidatures(false)
     }
-  }, [])
+  }, [cycleParam, filtreAppelCandidature, filtreStatutCandidature])
 
   useEffect(() => {
     if (acces === 'autorise') {
@@ -297,6 +325,26 @@ export default function InscriptionPage() {
   }
 
   // Actions candidatures
+
+  // Ouvrir la modale de détails en chargeant le dossier complet (pièces, tests)
+  const ouvrirDetailCandidature = async (c) => {
+    setCandidatureDetail(c) // afficher d'abord les données de base
+    setLoadingDetail(true)
+    try {
+      const detail = await inscriptionService.afficherCandidature(c.uuid)
+      // Le détail renvoie le parent en objet ; la modale lit des champs à plat. On conserve aussi classe/appel de la liste.
+      setCandidatureDetail(detail ? {
+        ...c, ...detail,
+        parent_nom: detail.parent?.nom, parent_prenom: detail.parent?.prenom, parent_lien: detail.parent?.lien,
+        parent_telephone: detail.parent?.telephone, parent_email: detail.parent?.email,
+      } : c)
+    } catch {
+      // garder les données de base en cas d'erreur
+    } finally {
+      setLoadingDetail(false)
+    }
+  }
+
   const handleValiderCandidature = (c) => {
     setConfirmValidation({ uuid: c.uuid, nom: `${c.nom} ${c.prenom}` })
   }
@@ -334,6 +382,51 @@ export default function InscriptionPage() {
       setActionLoadingCandidature(null)
       setConfirmRejet(null)
       setMotifRejet('')
+    }
+  }
+
+  // ── Lot ──
+  const basculerSelection = (uuid) =>
+    setSelection((prev) => {
+      const n = new Set(prev)
+      if (n.has(uuid)) n.delete(uuid)
+      else if (n.size < LOT_MAX) n.add(uuid)
+      else notify.error('Limite atteinte', `Un lot ne peut pas dépasser ${LOT_MAX} dossiers.`)
+      return n
+    })
+
+  const ouvrirLot = (action) => {
+    setMotifLot('')
+    setConfirmLot(action)
+  }
+
+  const confirmerLot = async () => {
+    if (!confirmLot || selection.size === 0) return
+    if (confirmLot === 'rejeter' && motifLot.trim().length < 5) return
+    setLotEnCours(true)
+    try {
+      const uuids = [...selection]
+      const r = confirmLot === 'valider'
+        ? await inscriptionService.validerLot(uuids)
+        : await inscriptionService.rejeterLot(uuids, motifLot.trim())
+      const noms = new Map(candidatures.map((c) => [c.uuid, `${c.nom} ${c.prenom}`]))
+      const echecs = (r?.resultats ?? []).filter((x) => !x.succes).map((x) => ({ ...x, nom: noms.get(x.uuid) ?? x.uuid }))
+      if (echecs.length === 0) {
+        notify.success(
+          confirmLot === 'valider' ? 'Candidatures validées' : 'Candidatures rejetées',
+          `${r?.reussis ?? uuids.length} dossier(s) traité(s).`,
+        )
+      } else {
+        setResultatLot({ action: confirmLot, reussis: r?.reussis ?? 0, echecs })
+      }
+      setSelection(new Set())
+      await chargerCandidatures()
+    } catch (err) {
+      notify.fromError(err)
+    } finally {
+      setLotEnCours(false)
+      setConfirmLot(null)
+      setMotifLot('')
     }
   }
 
@@ -385,14 +478,21 @@ export default function InscriptionPage() {
   })
 
   const filteredCandidatures = candidatures.filter((c) => {
-    const matchStatut = filtreStatutCandidature === 'tous' || c.statut === filtreStatutCandidature
+    const matchStatut =
+      filtreStatutCandidature === 'tous' ||
+      (filtreStatutCandidature === 'soumise' ? TRAITABLE(c) : c.statut === filtreStatutCandidature)
     const s = rechercheCandidature.toLowerCase()
     const matchSearch =
       !s ||
       `${c.nom ?? ''} ${c.prenom ?? ''}`.toLowerCase().includes(s) ||
+      (c.reference ?? '').toLowerCase().includes(s) ||
       (c.uuid ?? '').toLowerCase().includes(s)
     return matchStatut && matchSearch
   })
+  const traitables = filteredCandidatures.filter(TRAITABLE)
+  const toutSelectionne = traitables.length > 0 && traitables.every((c) => selection.has(c.uuid))
+  const basculerTout = () =>
+    setSelection(toutSelectionne ? new Set() : new Set(traitables.slice(0, LOT_MAX).map((c) => c.uuid)))
 
   const formaterDateHeure = (dStr) => {
     if (!dStr) return '-'
@@ -715,18 +815,42 @@ export default function InscriptionPage() {
               />
             </div>
             <div className="module-filters">
-              {['tous', 'soumise', 'validee', 'rejetee'].map((st) => (
+              {['tous', 'soumise', 'validee', 'rejetee', 'en_attente_paiement'].map((st) => (
                 <button
                   key={st}
                   type="button"
                   className={`module-filter-btn ${filtreStatutCandidature === st ? 'active' : ''}`}
-                  onClick={() => setFiltreStatutCandidature(st)}
+                  onClick={() => { setFiltreStatutCandidature(st); setSelection(new Set()) }}
                 >
-                  {st.charAt(0).toUpperCase() + st.slice(1)}
+                  {st === 'tous' ? 'Tous' : st === 'soumise' ? 'À traiter' : LIBELLES_STATUT_CANDIDATURE[st]}
                 </button>
               ))}
             </div>
+            <select
+              className="module-select"
+              value={filtreAppelCandidature}
+              onChange={(e) => { setFiltreAppelCandidature(e.target.value); setSelection(new Set()) }}
+              aria-label="Filtrer par appel à candidature"
+            >
+              <option value="">Tous les appels</option>
+              {appels.filter((a) => !cycleParam || a.cycle === cycleParam).map((a) => (
+                <option key={a.uuid} value={a.uuid}>{a.titre || `Appel ${a.cycle}`}</option>
+              ))}
+            </select>
           </div>
+
+          {selection.size > 0 && (
+            <div className="sel-bar" role="region" aria-label="Actions sur la sélection">
+              <strong>{selection.size} dossier{selection.size > 1 ? 's' : ''} sélectionné{selection.size > 1 ? 's' : ''}</strong>
+              <button type="button" className="btn-action btn-action--success" onClick={() => ouvrirLot('valider')}>
+                <CheckCircle size={15} /> Valider la sélection
+              </button>
+              <button type="button" className="btn-action btn-action--danger" onClick={() => ouvrirLot('rejeter')}>
+                <XCircle size={15} /> Rejeter la sélection
+              </button>
+              <button type="button" className="btn-action" onClick={() => setSelection(new Set())}>Désélectionner</button>
+            </div>
+          )}
 
           <div className="ap-card ap-card--flush">
             {chargementCandidatures ? (
@@ -739,9 +863,19 @@ export default function InscriptionPage() {
               </div>
             ) : (
               <div className="module-table-wrap">
-                <table className="ap-table" style={{ minWidth: 600 }}>
+                <table className="ap-table" style={{ minWidth: 700 }}>
                   <thead>
                     <tr>
+                      <th className="sel-col">
+                        <input
+                          type="checkbox"
+                          className="sel-box"
+                          checked={toutSelectionne}
+                          disabled={traitables.length === 0}
+                          onChange={basculerTout}
+                          aria-label="Sélectionner tous les dossiers à traiter"
+                        />
+                      </th>
                       <th>Candidat</th>
                       <th>Classe / Formation visée</th>
                       <th>Contact parent</th>
@@ -751,29 +885,44 @@ export default function InscriptionPage() {
                   </thead>
                   <tbody>
                     {filteredCandidatures.map((c) => (
-                      <tr key={c.uuid ?? c.id}>
+                      <tr key={c.uuid ?? c.id} className={selection.has(c.uuid) ? 'sel-row--on' : ''}>
+                        <td className="sel-col">
+                          <input
+                            type="checkbox"
+                            className="sel-box"
+                            checked={selection.has(c.uuid)}
+                            disabled={!TRAITABLE(c)}
+                            onChange={() => basculerSelection(c.uuid)}
+                            aria-label={`Sélectionner ${c.nom} ${c.prenom}`}
+                            title={TRAITABLE(c) ? undefined : 'Dossier déjà traité ou non finalisé'}
+                          />
+                        </td>
                         <td>
                           <div style={{ fontWeight: 700 }}>{c.nom} {c.prenom}</div>
                           <div style={{ fontSize: '0.78rem', color: 'var(--sg-text-muted)' }}>
-                            {c.sexe === 'M' ? 'Masculin' : 'Féminin'} • Né(e) le {c.date_naissance}
+                            {[c.sexe === 'M' ? 'Masculin' : c.sexe === 'F' ? 'Féminin' : null, c.date_naissance ? `Né(e) le ${c.date_naissance}` : null].filter(Boolean).join(' • ') || '-'}
+                            {c.reference ? ` • ${c.reference}` : ''}
                           </div>
                         </td>
-                        <td>{c.classe_visee?.nom ?? c.classe_nom ?? c.classe_visee_id ?? 'Non assignée'}</td>
                         <td>
-                          <div>{c.parent_nom ?? c.nom_parent ?? '-'}</div>
+                          <div>{c.classe_visee?.nom ?? 'Non assignée'}</div>
+                          {c.appel?.titre && <div style={{ fontSize: '0.78rem', color: 'var(--sg-text-muted)' }}>{c.appel.titre}</div>}
+                        </td>
+                        <td>
+                          <div>{[c.parent_prenom, c.parent_nom].filter(Boolean).join(' ') || c.nom_parent || '-'}</div>
                           <div style={{ fontSize: '0.78rem', color: 'var(--sg-text-muted)' }}>{c.parent_telephone ?? c.telephone_parent ?? '-'}</div>
                         </td>
                         <td>
                           <span className={`status-pill status-pill--${c.statut}`}>
-                            {c.statut}
+                            {LIBELLES_STATUT_CANDIDATURE[c.statut] ?? c.statut}
                           </span>
                         </td>
                         <td style={{ textAlign: 'right' }}>
-                          {c.statut === 'soumise' || c.statut === 'en_attente' ? (
+                          {TRAITABLE(c) ? (
                             <div style={{ display: 'inline-flex', gap: 8, justifyContent: 'flex-end' }}>
                               <button
                                 type="button"
-                                onClick={() => setCandidatureDetail(c)}
+                                onClick={() => ouvrirDetailCandidature(c)}
                                 className="btn-action"
                                 title="Voir les détails"
                               >
@@ -802,13 +951,15 @@ export default function InscriptionPage() {
                             <div style={{ display: 'inline-flex', gap: 8, justifyContent: 'flex-end' }}>
                               <button
                                 type="button"
-                                onClick={() => setCandidatureDetail(c)}
+                                onClick={() => ouvrirDetailCandidature(c)}
                                 className="btn-action"
                                 title="Voir les détails"
                               >
                                 <Eye size={15} /> Détails
                               </button>
-                              <span style={{ fontSize: '0.8rem', color: 'var(--sg-text-muted)', alignSelf: 'center' }}>Dossier traité</span>
+                              <span style={{ fontSize: '0.8rem', color: 'var(--sg-text-muted)', alignSelf: 'center' }}>
+                                {c.statut === 'en_attente_paiement' ? 'Paiement non confirmé' : c.statut === 'expiree' ? 'Délai dépassé' : 'Dossier traité'}
+                              </span>
                             </div>
                           )}
                         </td>
@@ -906,6 +1057,13 @@ export default function InscriptionPage() {
             </div>
             <div className="cfg-modale-corps" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
+              {/* Spinner pendant chargement détail complet */}
+              {loadingDetail && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', color: 'var(--sg-text-muted)' }}>
+                  <Loader mode="button" /> Chargement du dossier complet…
+                </div>
+              )}
+
               {/* Statut */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span className={`status-pill status-pill--${candidatureDetail.statut}`} style={{ fontSize: '0.88rem', padding: '4px 14px' }}>
@@ -1002,7 +1160,7 @@ export default function InscriptionPage() {
                               {p.nom_original}
                             </p>
                             <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--sg-text-muted)' }}>
-                              {p.type} · {p.statut_validation ?? 'en attente'}
+                              {p.libelle || p.type} · {p.statut_validation ?? 'en attente'}
                             </p>
                           </div>
                         </div>
@@ -1074,17 +1232,73 @@ export default function InscriptionPage() {
         onConfirm={confirmerRejet}
         onCancel={() => { setConfirmRejet(null); setMotifRejet('') }}
       >
-        <div className="ap-field" style={{ marginTop: 12 }}>
-          <label className="ap-label" htmlFor="motif-rejet">Motif du rejet <span style={{ color: '#c0392b' }}>*</span></label>
+        <div style={{ marginTop: 12 }}>
+          <label className="cd-label" htmlFor="motif-rejet">Motif du rejet *</label>
           <textarea
             id="motif-rejet"
-            className="ap-textarea"
+            className="cd-field"
             rows={3}
-            placeholder="Expliquez la raison du rejet (sera communiqué au candidat)…"
+            maxLength={500}
+            placeholder="Expliquez la raison du rejet (5 caractères minimum)…"
             value={motifRejet}
             onChange={(e) => setMotifRejet(e.target.value)}
           />
         </div>
+      </ConfirmDialog>
+
+      {/* ── Lot : validation ── */}
+      <ConfirmDialog
+        open={confirmLot === 'valider'}
+        tone="primary"
+        title={`Valider ${selection.size} candidature${selection.size > 1 ? 's' : ''}`}
+        message="Chaque admission créera l'apprenant dans la scolarité. Un dossier déjà rejeté ou dont la classe est complète sera ignoré et signalé."
+        confirmLabel="Valider la sélection"
+        loading={lotEnCours}
+        onConfirm={confirmerLot}
+        onCancel={() => setConfirmLot(null)}
+      />
+
+      {/* ── Lot : rejet (motif unique) ── */}
+      <ConfirmDialog
+        open={confirmLot === 'rejeter'}
+        tone="danger"
+        title={`Rejeter ${selection.size} candidature${selection.size > 1 ? 's' : ''}`}
+        message="Le même motif sera enregistré pour tous les dossiers sélectionnés. Un dossier déjà validé ne peut pas être rejeté."
+        confirmLabel={motifLot.trim().length < 5 ? 'Saisissez un motif' : 'Confirmer le rejet'}
+        loading={lotEnCours}
+        onConfirm={confirmerLot}
+        onCancel={() => { setConfirmLot(null); setMotifLot('') }}
+      >
+        <div style={{ marginTop: 12 }}>
+          <label className="cd-label" htmlFor="motif-lot">Motif du rejet (commun au lot) *</label>
+          <textarea
+            id="motif-lot"
+            className="cd-field"
+            rows={3}
+            maxLength={500}
+            placeholder="Expliquez la raison du rejet (5 caractères minimum)…"
+            value={motifLot}
+            onChange={(e) => setMotifLot(e.target.value)}
+          />
+        </div>
+      </ConfirmDialog>
+
+      {/* ── Lot : résultat avec dossiers non traités ── */}
+      <ConfirmDialog
+        open={!!resultatLot}
+        tone="warning"
+        hideCancel
+        title="Traitement partiel"
+        message={`${resultatLot?.reussis ?? 0} dossier(s) traité(s), ${resultatLot?.echecs?.length ?? 0} non traité(s) :`}
+        confirmLabel="Fermer"
+        onConfirm={() => setResultatLot(null)}
+        onCancel={() => setResultatLot(null)}
+      >
+        <ul className="cd-list">
+          {(resultatLot?.echecs ?? []).map((e) => (
+            <li key={e.uuid}><strong>{e.nom}</strong> : {e.message}</li>
+          ))}
+        </ul>
       </ConfirmDialog>
 
       {/* ── Confirmation clôture appel ── */}
@@ -1219,7 +1433,7 @@ function VueEnsembleInscription({
           <div>
             <strong>Aucun cycle actif pour cette année</strong>
             <p>
-              Rendez-vous dans <Link to="/scolarite?section=cycles">Scolarité • Activer des cycles</Link> pour activer les cycles de votre établissement.
+              Rendez-vous dans <Link to={lienEtablissement(slug, '/scolarite?section=cycles')}>Scolarité • Activer des cycles</Link> pour activer les cycles de votre établissement.
             </p>
           </div>
         </div>

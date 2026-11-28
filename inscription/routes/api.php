@@ -33,9 +33,12 @@ Route::prefix('v1')->group(function () {
     Route::get('/public/appels-candidatures',        [AppelPublicController::class, 'index']);
     Route::get('/public/appels-candidatures/{uuid}', [AppelPublicController::class, 'show']);
 
-    // Soumission publique d'une candidature (parent/tuteur sans compte)
-    // Le tenant_id est fourni dans le body ou via X-Tenant-Id
+    // Candidature publique, sans compte : dépôt (multipart), suivi et paiement des frais.
+    // Le tenant est résolu côté serveur depuis le slug ; contrôles : captcha, honeypot, limitation de débit.
     Route::post('/public/candidatures', [CandidaturePublicController::class, 'store']);
+    Route::get('/public/candidatures/{reference}/suivi', [CandidaturePublicController::class, 'suivi']);
+    Route::get('/public/candidatures/{reference}/paiement/modes', [CandidaturePublicController::class, 'modesPaiement']);
+    Route::post('/public/candidatures/{reference}/paiement', [CandidaturePublicController::class, 'payer']);
 
     // ── Routes PROTÉGÉES (JWT requis) ───────────────────────────────────────
     Route::middleware([VerifyTenantAndJwt::class])->group(function () {
@@ -58,9 +61,17 @@ Route::prefix('v1')->group(function () {
     Route::get('/candidatures', [CandidatureController::class, 'index'])
         ->middleware('role:administrateur,personnel,enseignant');
 
-    // Soumission publique : ouverte sans JWT (parent/tuteur sans compte)
-    // Le VerifyTenantAndJwt laisse passer POST /candidatures sans Bearer (exception metier)
-    Route::post('/candidatures', [CandidatureController::class, 'store']);
+    // Traitement par lot (déclaré AVANT /candidatures/{uuid}/... pour ne pas être capturé par le paramètre).
+    // Validation : directeur uniquement. Rejet : directeur ou secrétaire. Motif unique pour tout le lot.
+    Route::post('/candidatures/lot/valider', [CandidatureController::class, 'validerLot'])
+        ->middleware('role:administrateur');
+    Route::post('/candidatures/lot/rejeter', [CandidatureController::class, 'rejeterLot'])
+        ->middleware('role:administrateur,personnel');
+
+    // Saisie d'un dossier par le personnel. Le dépôt par le public passe par /public/candidatures :
+    // plus AUCUNE exception d'authentification sur cette route.
+    Route::post('/candidatures', [CandidatureController::class, 'store'])
+        ->middleware('role:administrateur,personnel');
 
     // Consultation du dossier : secretaire, directeur, jury
     Route::get('/candidatures/{uuid}', [CandidatureController::class, 'show'])
@@ -75,9 +86,7 @@ Route::prefix('v1')->group(function () {
         ->middleware('role:administrateur,personnel');
 
     // --- Pieces justificatives ---
-    // Ajout d'une piece : secretaire ou le service lui-meme (interne)
-    Route::post('/candidatures/{uuid}/pieces-justificatives', [PieceJustificativeController::class, 'store'])
-        ->middleware('role:administrateur,personnel');
+    // Les pièces sont déposées avec la candidature (chemin décidé par le serveur) : plus de route d'ajout libre.
     // Téléchargement/visualisation d'une pièce
     Route::get('/pieces-justificatives/{pieceUuid}/telecharger', [PieceJustificativeController::class, 'telecharger'])
         ->middleware('role:administrateur,personnel,enseignant');

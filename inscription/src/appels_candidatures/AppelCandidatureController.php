@@ -6,6 +6,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class AppelCandidatureController extends Controller
 {
@@ -24,53 +25,12 @@ class AppelCandidatureController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse    {
+    public function store(Request $request): JsonResponse
+    {
+        $donnees = $request->validate($this->regles(true));
+        $this->controlerCoherence($donnees);
 
-        $donnees = $request->validate([
-            'cycle'                 => ['required', Rule::in(['maternelle', 'primaire', 'secondaire', 'universitaire'])],
-            'annee_scolaire'        => ['nullable', 'string', 'max:20'],
-            'titre'                 => ['nullable', 'string', 'max:255'],
-            'description'           => ['nullable', 'string'],
-            'date_debut'            => ['required', 'date'],
-            'date_fin'              => ['required', 'date', 'after:date_debut'],
-            'est_payant'            => ['sometimes', 'boolean'],
-            'montant'               => ['nullable', 'numeric', 'min:0'],
-            'devise'                => ['nullable', 'string', 'max:10'],
-            'places_disponibles'    => ['nullable', 'integer', 'min:1'],
-            'statut'                => ['sometimes', Rule::in(['brouillon', 'ouvert', 'ferme', 'termine', 'annule'])],
-            'classe_visee_id'       => ['nullable', 'integer'],
-            'classe_uuid'           => ['nullable', 'string', 'max:36'],
-
-            // Cibles par cycle
-            'groupe_id'             => ['nullable', 'integer'],
-            'groupe_nom'            => ['nullable', 'string', 'max:100'],
-            'est_cycle_unique'      => ['sometimes', 'boolean'],
-
-            'promotion_nom'         => ['nullable', 'string', 'max:100'],
-            'promotion_abreviation' => ['nullable', 'string', 'max:50'],
-            'serie_nom'             => ['nullable', 'string', 'max:100'],
-            'serie_code'            => ['nullable', 'string', 'max:50'],
-
-            'cycle_univ'            => ['nullable', 'string', 'max:50'],
-            'departement_nom'       => ['nullable', 'string', 'max:100'],
-            'option_nom'            => ['nullable', 'string', 'max:100'],
-            'niveau_etude'          => ['nullable', 'string', 'max:100'],
-            'filiere_complete'      => ['nullable', 'string', 'max:255'],
-
-            // Listes dynamiques
-            'criteres_eligibilite'           => ['nullable', 'array'],
-            'criteres_eligibilite.*'          => ['array'],
-            'criteres_eligibilite.*.type'     => ['nullable', 'string'],
-            'criteres_eligibilite.*.label'    => ['nullable', 'string'],
-
-            'pieces_fournir'                  => ['nullable', 'array'],
-            'pieces_fournir.*'                => ['array'],
-            'pieces_fournir.*.libelle'        => ['nullable', 'string'],
-            'pieces_fournir.*.format'         => ['nullable', 'string'],
-            'pieces_fournir.*.obligatoire'    => ['nullable', 'boolean'],
-        ]);
-
-        $appel = $this->service->creer($donnees);
+        $appel = $this->service->creer($this->normaliser($donnees));
 
         return response()->json([
             'succes'  => true,
@@ -89,51 +49,12 @@ class AppelCandidatureController extends Controller
         ]);
     }
 
-    public function update(Request $request, string $uuid): JsonResponse    {
+    public function update(Request $request, string $uuid): JsonResponse
+    {
+        $donnees = $request->validate($this->regles(false));
+        $this->controlerCoherence($donnees);
 
-        $donnees = $request->validate([
-            'cycle'                 => ['sometimes', Rule::in(['maternelle', 'primaire', 'secondaire', 'universitaire'])],
-            'annee_scolaire'        => ['sometimes', 'nullable', 'string', 'max:20'],
-            'titre'                 => ['sometimes', 'string', 'max:255'],
-            'description'           => ['sometimes', 'nullable', 'string'],
-            'date_debut'            => ['sometimes', 'date'],
-            'date_fin'              => ['sometimes', 'date'],
-            'est_payant'            => ['sometimes', 'boolean'],
-            'montant'               => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'devise'                => ['sometimes', 'nullable', 'string', 'max:10'],
-            'places_disponibles'    => ['sometimes', 'nullable', 'integer', 'min:1'],
-            'statut'                => ['sometimes', Rule::in(['brouillon', 'ouvert', 'ferme', 'termine', 'annule'])],
-            'classe_visee_id'       => ['sometimes', 'nullable', 'integer'],
-            'classe_uuid'           => ['sometimes', 'nullable', 'string', 'max:36'],
-
-            'groupe_id'             => ['sometimes', 'nullable', 'integer'],
-            'groupe_nom'            => ['sometimes', 'nullable', 'string', 'max:100'],
-            'est_cycle_unique'      => ['sometimes', 'boolean'],
-
-            'promotion_nom'         => ['sometimes', 'nullable', 'string', 'max:100'],
-            'promotion_abreviation' => ['sometimes', 'nullable', 'string', 'max:50'],
-            'serie_nom'             => ['sometimes', 'nullable', 'string', 'max:100'],
-            'serie_code'            => ['sometimes', 'nullable', 'string', 'max:50'],
-
-            'cycle_univ'            => ['sometimes', 'nullable', 'string', 'max:50'],
-            'departement_nom'       => ['sometimes', 'nullable', 'string', 'max:100'],
-            'option_nom'            => ['sometimes', 'nullable', 'string', 'max:100'],
-            'niveau_etude'          => ['sometimes', 'nullable', 'string', 'max:100'],
-            'filiere_complete'      => ['sometimes', 'nullable', 'string', 'max:255'],
-
-            'criteres_eligibilite'           => ['sometimes', 'nullable', 'array'],
-            'criteres_eligibilite.*'          => ['array'],
-            'criteres_eligibilite.*.type'     => ['nullable', 'string'],
-            'criteres_eligibilite.*.label'    => ['nullable', 'string'],
-
-            'pieces_fournir'                  => ['sometimes', 'nullable', 'array'],
-            'pieces_fournir.*'                => ['array'],
-            'pieces_fournir.*.libelle'        => ['nullable', 'string'],
-            'pieces_fournir.*.format'         => ['nullable', 'string'],
-            'pieces_fournir.*.obligatoire'    => ['nullable', 'boolean'],
-        ]);
-
-        $appel = $this->service->modifier($uuid, $donnees);
+        $appel = $this->service->modifier($uuid, $this->normaliser($donnees));
 
         return response()->json([
             'succes'  => true,
@@ -161,5 +82,82 @@ class AppelCandidatureController extends Controller
             'succes'  => true,
             'message' => 'Appel à candidature supprimé avec succès.',
         ]);
+    }
+
+    /** Schéma strict : ce que l'appel enregistre est exactement ce que le candidat verra et que le serveur appliquera. */
+    private function regles(bool $creation): array
+    {
+        $p = $creation ? 'required' : 'sometimes';
+        $n = $creation ? ['nullable'] : ['sometimes', 'nullable'];
+
+        return [
+            'cycle'                 => [$p, Rule::in(['maternelle', 'primaire', 'secondaire', 'universitaire'])],
+            'annee_scolaire'        => [...$n, 'string', 'max:20'],
+            'titre'                 => $creation ? ['nullable', 'string', 'max:255'] : ['sometimes', 'string', 'max:255'],
+            'description'           => [...$n, 'string', 'max:5000'],
+            'date_debut'            => [$p, 'date'],
+            'date_fin'              => $creation ? ['required', 'date', 'after:date_debut'] : ['sometimes', 'date'],
+            'est_payant'            => ['sometimes', 'boolean'],
+            'montant'               => ['required_if:est_payant,true,1', ...$n, 'numeric', 'min:0', 'max:100000000'],
+            'devise'                => [...$n, Rule::in(['XOF', 'XAF', 'GNF', 'CDF', 'FCFA'])],
+            'places_disponibles'    => [...$n, 'integer', 'min:1'],
+            'statut'                => ['sometimes', Rule::in(['brouillon', 'planifie', 'ouvert', 'termine', 'annule'])],
+            'classe_visee_id'       => [...$n, 'integer'],
+            'classe_uuid'           => [...$n, 'string', 'max:36'],
+
+            'groupe_id'             => [...$n, 'integer'],
+            'groupe_nom'            => [...$n, 'string', 'max:100'],
+            'est_cycle_unique'      => ['sometimes', 'boolean'],
+            'promotion_nom'         => [...$n, 'string', 'max:100'],
+            'promotion_abreviation' => [...$n, 'string', 'max:50'],
+            'serie_nom'             => [...$n, 'string', 'max:100'],
+            'serie_code'            => [...$n, 'string', 'max:50'],
+            'cycle_univ'            => [...$n, 'string', 'max:50'],
+            'departement_nom'       => [...$n, 'string', 'max:100'],
+            'option_nom'            => [...$n, 'string', 'max:100'],
+            'niveau_etude'          => [...$n, 'string', 'max:100'],
+            'filiere_complete'      => [...$n, 'string', 'max:255'],
+
+            'criteres_eligibilite'                    => [...$n, 'array', 'max:30'],
+            'criteres_eligibilite.*'                  => ['array'],
+            'criteres_eligibilite.*.type'             => ['required', Rule::in(['age', 'type_inscription', 'texte', 'contact', 'niveau_scolaire', 'adresse', 'parent_tuteur'])],
+            'criteres_eligibilite.*.label'            => ['nullable', 'string', 'max:255'],
+            'criteres_eligibilite.*.obligatoire'      => ['nullable', 'boolean'],
+            'criteres_eligibilite.*.date_min'         => ['nullable', 'date'],
+            'criteres_eligibilite.*.date_max'         => ['nullable', 'date'],
+            'criteres_eligibilite.*.mode'             => ['nullable', Rule::in(['concours', 'test', 'libre', 'selection'])],
+            'criteres_eligibilite.*.matieres_composees'   => ['nullable', 'array', 'max:30'],
+            'criteres_eligibilite.*.matieres_composees.*' => ['string', 'max:100'],
+            'criteres_eligibilite.*.valeur_texte'     => ['nullable', 'string', 'max:1000'],
+            'criteres_eligibilite.*.niveaux_acceptes'   => ['nullable', 'array', 'max:30'],
+            'criteres_eligibilite.*.niveaux_acceptes.*' => ['string', 'max:100'],
+
+            'pieces_fournir'                  => [...$n, 'array', 'max:30'],
+            'pieces_fournir.*'                => ['array'],
+            'pieces_fournir.*.libelle'        => ['required', 'string', 'max:255'],
+            'pieces_fournir.*.format'         => ['nullable', 'string', 'max:50', 'regex:/^[A-Za-z ,;\/|.]+$/'],
+            'pieces_fournir.*.obligatoire'    => ['nullable', 'boolean'],
+        ];
+    }
+
+    private function controlerCoherence(array $d): void
+    {
+        foreach ((array) ($d['criteres_eligibilite'] ?? []) as $i => $c) {
+            if (($c['type'] ?? null) === 'age' && !empty($c['date_min']) && !empty($c['date_max']) && $c['date_min'] > $c['date_max']) {
+                throw ValidationException::withMessages(["criteres_eligibilite.{$i}.date_max" => 'La date maximale doit être postérieure ou égale à la date minimale.']);
+            }
+        }
+    }
+
+    private function normaliser(array $d): array
+    {
+        if (isset($d['devise']) && strtoupper($d['devise']) === 'FCFA') {
+            $d['devise'] = 'XOF';
+        }
+        if (array_key_exists('est_payant', $d) && !$d['est_payant']) {
+            $d['montant'] = 0;
+        }
+
+        return $d;
     }
 }

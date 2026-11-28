@@ -1,6 +1,7 @@
 import {
-  Controller, Get, Post, Param, Query, Res, HttpCode, HttpStatus, NotFoundException,
+  Controller, Get, Post, Param, Query, Res, HttpCode, HttpStatus, NotFoundException, UseGuards,
 } from '@nestjs/common';
+import { AccesEncaissementGuard } from '../common/guards/acces-encaissement.guard';
 import { Response } from 'express';
 import { RecuService } from './recu.service';
 
@@ -43,7 +44,8 @@ export class RecuController {
     return this.service.verifierRecu(code);
   }
 
-  /** Liste les reçus d'un établissement */
+  /** Liste les reçus d'un établissement (authentifié, limité à son établissement) */
+  @UseGuards(AccesEncaissementGuard)
   @Get('etablissements/:etablissementUuid/recus')
   async lister(
     @Param('etablissementUuid') etablissementUuid: string,

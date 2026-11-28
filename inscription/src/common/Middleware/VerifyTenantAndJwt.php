@@ -73,32 +73,10 @@ class VerifyTenantAndJwt
             return ApiResponse::erreur('Secret interne invalide', 'ACCES_INTERNE_REFUSE', 403);
         }
 
-        // 2. Exception metier : Soumission publique initiale d'une candidature
-        // Seule la creation (POST /v1/candidatures) est ouverte au public (parent postulant sans compte)
-        if ($request->is('*/candidatures') && $request->isMethod('post')) {
-            $tenantHeader = $request->header('X-Tenant-Id', $request->input('tenant_id'));
-            if (!$tenantHeader) {
-                return ApiResponse::erreur('Identifiant de l\'etablissement (tenant_id) obligatoire pour soumettre une candidature', 'TENANT_MANQUANT', 422);
-            }
+        // 2. Plus d'exception d'authentification : le dépôt public d'une candidature passe par
+        //    /v1/public/candidatures (hors de ce middleware, avec captcha, limitation de débit et critères serveur).
 
-            // Résolution UUID → entier également sur le chemin public, sans quoi
-            // la candidature enregistrée porterait un tenant inexploitable.
-            try {
-                $tenantId = app(TenantResolver::class)->resoudre($tenantHeader);
-            } catch (\Throwable $e) {
-                return ApiResponse::erreur(
-                    'Etablissement de rattachement introuvable : ' . $e->getMessage(),
-                    'TENANT_INVALIDE',
-                    422
-                );
-            }
-
-            app()->instance('current_tenant_id', $tenantId);
-            app()->instance('current_tenant_ref', $tenantHeader);
-            return $next($request);
-        }
-
-        // 3. Bearer Token JWT obligatoire pour toutes les autres routes
+        // 2. Bearer Token JWT obligatoire pour toutes les autres routes
         $authHeader = $request->header('Authorization');
         if (!$authHeader || !str_starts_with($authHeader, 'Bearer ')) {
             return ApiResponse::erreur('Authentification requise. Jeton Bearer manquant.', 'NON_AUTHENTIFIE', 401);

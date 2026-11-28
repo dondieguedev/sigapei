@@ -24,6 +24,9 @@ class PieceJustificative extends Model
         'taille_octets',
         'mime_type',
         'statut_validation',
+        'piece_id',
+        'libelle',
+        'hash_sha256',
     ];
 
     protected $casts = [

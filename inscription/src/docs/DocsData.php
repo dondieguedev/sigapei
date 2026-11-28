@@ -16,7 +16,7 @@ class DocsData
                 'type' => 'Bearer JWT',
                 'header' => 'Authorization: Bearer <token>',
                 'issuer' => 'api-identite.sigapei.com',
-                'exception_soumission' => 'POST /v1/candidatures accepte un appel sans JWT si le header X-Tenant-Id est présent (soumission publique par un parent sans compte).',
+                'depot_public' => 'Le dépôt sans compte passe par POST /v1/public/candidatures (captcha, limitation de débit, critères contrôlés côté serveur). POST /v1/candidatures exige désormais un JWT (administrateur, personnel).',
                 'appels_internes' => 'Utiliser le header X-Internal-Secret à la place du Bearer JWT pour les appels entre microservices.',
             ],
             'format_reponse_standard' => [

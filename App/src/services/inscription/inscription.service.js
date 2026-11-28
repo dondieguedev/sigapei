@@ -22,6 +22,14 @@ export const inscriptionService = {
   },
 
   /**
+   * Afficher le détail complet d'une candidature (avec pièces et tests)
+   */
+  afficherCandidature: async (uuid) => {
+    const r = await http.get(`/candidatures/${uuid}`)
+    return r?.donnees ?? r?.data ?? r
+  },
+
+  /**
    * Soumettre une nouvelle candidature
    */
   soumettreCandidature: async (donnees) => {
@@ -42,6 +50,19 @@ export const inscriptionService = {
    */
   rejeterCandidature: async (uuid, motif) => {
     const r = await http.post(`/candidatures/${uuid}/rejeter`, { motif })
+    return r?.donnees ?? r?.data ?? r
+  },
+
+  /**
+   * Traitement par lot (50 dossiers maximum). Résultat par dossier : { lot_uuid, reussis, echecs, resultats[] }.
+   */
+  validerLot: async (uuids) => {
+    const r = await http.post('/candidatures/lot/valider', { uuids })
+    return r?.donnees ?? r?.data ?? r
+  },
+
+  rejeterLot: async (uuids, motif) => {
+    const r = await http.post('/candidatures/lot/rejeter', { uuids, motif })
     return r?.donnees ?? r?.data ?? r
   },
 
