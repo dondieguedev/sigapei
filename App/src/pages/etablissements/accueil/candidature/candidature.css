@@ -55,3 +55,57 @@
 .wiz-quit{display:inline-flex;gap:6px;align-items:center;background:none;border:0;color:var(--w-mu);cursor:pointer;font:inherit;padding:4px 6px;border-radius:6px}
 .wiz-quit:hover:not(:disabled){color:var(--w-tx);background:var(--w-alt)}
 .wiz-confirm{justify-content:space-between;flex-wrap:wrap}.wiz-confirm-btns{display:flex;gap:8px}
+
+/* ════════════════════════════════════════════════════
+   RESPONSIVE - Formulaire de candidature
+════════════════════════════════════════════════════ */
+
+/* Tablette */
+@media (max-width: 900px) {
+  .wiz-main { max-width: 100%; padding: 20px 16px 56px; }
+  .wiz-card  { padding: 20px; }
+  .wiz-grid  { grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+}
+
+/* Mobile standard */
+@media (max-width: 640px) {
+  .wiz-main  { padding: 14px 10px 48px; }
+  .wiz-card  { padding: 16px 12px; border-radius: 10px; }
+  .wiz-h2    { font-size: 1.1rem; margin: 14px 0 10px; }
+  .wiz-grid  { grid-template-columns: 1fr; gap: 10px; }
+
+  /* Stepper : labels masqués sauf étape active */
+  .wiz-step-t { display: none; }
+  .wiz-step--actif .wiz-step-t { display: inline; }
+  .wiz-stepper ol { gap: 4px; }
+
+  /* Actions : plein largeur */
+  .wiz-actions { flex-direction: column-reverse; gap: 8px; }
+  .wiz-actions .ae2-btn { width: 100%; justify-content: center; }
+
+  /* Pièces */
+  .wiz-piece       { padding: 10px; }
+  .wiz-piece-head  { flex-direction: column; gap: 4px; align-items: flex-start; }
+  .wiz-piece-row   { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .wiz-filebtn     { width: 100%; justify-content: center; }
+
+  /* Résumé */
+  .wiz-resume-grid { grid-template-columns: 1fr; }
+  .wiz-recap dl div { flex-direction: column; gap: 2px; }
+  .wiz-recap dt { min-width: unset; }
+
+  /* Topbar quitter */
+  .wiz-topbar { justify-content: flex-start; }
+
+  /* Modes de paiement */
+  .wiz-modes { width: 100%; }
+  .wiz-pay-amount { font-size: 1.3rem; }
+}
+
+/* Très petit mobile */
+@media (max-width: 400px) {
+  .wiz-main { padding: 10px 8px 40px; }
+  .wiz-card { padding: 12px 10px; }
+  .wiz-step-n { width: 22px; height: 22px; font-size: .72rem; }
+  .wiz-actions .ae2-btn { font-size: 0.85rem; padding: 10px 16px; }
+}
