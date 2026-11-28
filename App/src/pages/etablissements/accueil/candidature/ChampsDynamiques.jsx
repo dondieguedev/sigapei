@@ -95,7 +95,22 @@ export function ChampPiece({ piece, fichier, erreur, onChange }) {
           onChange={(e) => { onChange(e.target.files?.[0] ?? null); e.target.value = '' }} />
         {fichier && (
           <span className="wiz-filename">
-            <CheckCircle2 size={14} aria-hidden="true" /> {fichier.name} <small>({tailleLisible(fichier.size)})</small>
+            <CheckCircle2 size={14} aria-hidden="true" />
+            <button
+              type="button"
+              className="wiz-link"
+              style={{ padding: 0, fontSize: 'inherit', fontWeight: 600 }}
+              onClick={() => {
+                const url = URL.createObjectURL(fichier)
+                window.open(url, '_blank', 'noopener')
+                // Libérer l'URL après ouverture
+                setTimeout(() => URL.revokeObjectURL(url), 10000)
+              }}
+              title="Ouvrir le fichier"
+            >
+              {fichier.name}
+            </button>
+            <small>({tailleLisible(fichier.size)})</small>
             <button type="button" className="wiz-x" onClick={() => onChange(null)} aria-label={`Retirer ${fichier.name}`}><X size={14} /></button>
           </span>
         )}

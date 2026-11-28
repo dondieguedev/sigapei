@@ -19,6 +19,8 @@ class CaptchaVerifier
             return !app()->environment('production');
         }
         if (empty($jeton)) {
+            Log::warning('[CAPTCHA] Refus : jeton absent (le navigateur n\'a pas fourni de jeton).');
+
             return false;
         }
 
@@ -48,16 +50,28 @@ class CaptchaVerifier
             ['event' => array_filter(['token' => $jeton, 'siteKey' => $cfg['cle_site'], 'userIpAddress' => $ip, 'expectedAction' => $cfg['action'] ?: null])]
         );
         if (!$r->successful()) {
+            Log::warning('[CAPTCHA] Enterprise : HTTP ' . $r->status() . ' ' . $r->json('error.status') . ' - ' . $r->json('error.message'));
+
             return false;
         }
         if (!($r->json('tokenProperties.valid') === true)) {
+            Log::warning('[CAPTCHA] Enterprise : jeton invalide, raison=' . $r->json('tokenProperties.invalidReason'));
+
             return false;
         }
         if (!empty($cfg['action']) && $r->json('tokenProperties.action') !== $cfg['action']) {
+            Log::warning('[CAPTCHA] Enterprise : action reçue=' . $r->json('tokenProperties.action') . ' attendue=' . $cfg['action']);
+
+            return false;
+        }
+        $score = (float) $r->json('riskAnalysis.score', 0);
+        if ($score < (float) $cfg['score_min']) {
+            Log::warning('[CAPTCHA] Enterprise : score ' . $score . ' < minimum ' . $cfg['score_min']);
+
             return false;
         }
 
-        return (float) $r->json('riskAnalysis.score', 0) >= (float) $cfg['score_min'];
+        return true;
     }
 
     private function standard(string $jeton, ?string $ip, array $cfg): bool
@@ -66,9 +80,16 @@ class CaptchaVerifier
             'secret' => $cfg['cle_secrete'], 'response' => $jeton, 'remoteip' => $ip,
         ]));
         if (!$r->successful() || $r->json('success') !== true) {
+            Log::warning('[CAPTCHA] Standard : refus, erreurs=' . json_encode($r->json('error-codes')));
+
+            return false;
+        }
+        if ($r->json('score') !== null && (float) $r->json('score') < (float) $cfg['score_min']) {
+            Log::warning('[CAPTCHA] Standard : score ' . $r->json('score') . ' < minimum ' . $cfg['score_min']);
+
             return false;
         }
 
-        return $r->json('score') === null || (float) $r->json('score') >= (float) $cfg['score_min'];
+        return true;
     }
 }
