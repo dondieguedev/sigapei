@@ -2,6 +2,7 @@
 
 namespace App\candidatures;
 
+use App\appels_candidatures\AppelCandidature;
 use Illuminate\Database\Eloquent\Collection;
 
 class CandidatureRepository
@@ -12,6 +13,17 @@ class CandidatureRepository
 
         if (!empty($filtres['statut'])) {
             $query->where('statut', $filtres['statut']);
+        } else {
+            // File de traitement par défaut : ni dossiers non réglés, ni dossiers expirés.
+            $query->whereNotIn('statut', ['en_attente_paiement', 'expiree']);
+        }
+
+        if (!empty($filtres['appel_uuid'])) {
+            $query->where('appel_uuid', $filtres['appel_uuid']);
+        }
+
+        if (!empty($filtres['cycle'])) {
+            $query->whereIn('appel_uuid', AppelCandidature::where('cycle', $filtres['cycle'])->select('uuid'));
         }
 
         if (!empty($filtres['classe_visee_id'])) {

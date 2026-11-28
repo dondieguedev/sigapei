@@ -99,6 +99,11 @@ export default () => ({
     from: process.env.WHATSAPP_FROM,
   },
 
+  /** Encaissements : durée de validité d'un paiement non finalisé (minutes). */
+  encaissement: {
+    expirationMinutes: parseInt(process.env.ENCAISSEMENT_EXPIRATION_MINUTES ?? '30', 10),
+  },
+
   /** Stockage reçus */
   recus: {
     storagePath: process.env.RECUS_STORAGE_PATH ?? './storage/recus',

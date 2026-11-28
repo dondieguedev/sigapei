@@ -20,6 +20,7 @@ import {
   BadRequestException, ConflictException, ForbiddenException,
   Injectable, Logger, NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DataSource, EntityManager } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { AgregateurRegistre } from '../agregateurs/agregateur.registre';
@@ -45,7 +46,7 @@ export interface InitierEncaissementDto {
     telephone?: string;
     pays?: string;
   };
-  acteurUuid: string;
+  acteurUuid?: string | null;
   acteurRole: string;
   correlationId?: string;
   ip?: string;
@@ -69,7 +70,14 @@ export class EncaissementService {
     private readonly agregateurs: AgregateurRegistre,
     private readonly audit: AuditService,
     private readonly chiffrement: ChiffrementService,
+    private readonly config: ConfigService,
   ) {}
+
+  /** Durée de validité d'un encaissement non payé (ENCAISSEMENT_EXPIRATION_MINUTES, défaut 30). */
+  private expirationMinutes(): number {
+    const n = Number(this.config.get<number>('encaissement.expirationMinutes'));
+    return Number.isFinite(n) && n >= 1 && n <= 1440 ? Math.floor(n) : 30;
+  }
 
   /** Pas de redirection ouverte : l'adresse de retour doit appartenir à une origine déclarée (CORS_ORIGINS). */
   private urlRetourAutorisee(url: string): string {
@@ -153,6 +161,21 @@ export class EncaissementService {
         telephoneEmpreinte = this.chiffrement.empreinte(dto.payeur.telephone, contexte);
       }
 
+      // Idempotence métier : un seul encaissement ouvert par objet (évite les doubles paiements sur double clic).
+      if (dto.objetType && dto.objetUuid) {
+        const [ouvert] = await m.query(
+          `SELECT uuid, reference_marchande, url_paiement, statut, agregateur_id
+             FROM "paiement"."encaissement"
+            WHERE etablissement_uuid = $1 AND objet_type = $2 AND objet_uuid = $3
+              AND statut IN ('initie','en_attente') AND expire_le > now() AND agregateur_id = $4
+            ORDER BY created_at DESC LIMIT 1`,
+          [dto.etablissementUuid, dto.objetType, dto.objetUuid, agregRow.id],
+        );
+        if (ouvert) {
+          return { uuid: ouvert.uuid, referenceMarchande: ouvert.reference_marchande, urlPaiement: ouvert.url_paiement ?? undefined, statut: ouvert.statut };
+        }
+      }
+
       // Référence marchande unique
       const referenceMarchande = `ENC-${Date.now()}-${uuidv4().slice(0, 8).toUpperCase()}`;
       const cleIdempotence = referenceMarchande;
@@ -206,7 +229,7 @@ export class EncaissementService {
             payeur_utilisateur_uuid, payeur_nom, payeur_telephone_chiffre, payeur_telephone_masque,
             payeur_telephone_empreinte, payeur_email,
             cle_idempotence, url_paiement, expire_le, metadonnees)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,now()+interval'24 hours',$26::jsonb)`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,now() + make_interval(mins => $27::int),$26::jsonb)`,
         [
           encaissementUuid, dto.etablissementUuid, portefeuille.id, agregRow.id, accord.mode_id, dto.devise,
           dto.montant.toString(), fraisACharge, fraisEstimes.toString(), montantPaye.toString(), montantNet.toString(),
@@ -218,6 +241,7 @@ export class EncaissementService {
           dto.payeur?.email ?? null,
           cleIdempotence, initResponse.urlPaiement ?? null,
           JSON.stringify({ correlation_id: dto.correlationId }),
+          this.expirationMinutes(),
         ],
       );
 
@@ -260,7 +284,7 @@ export class EncaissementService {
   ): Promise<void> {
     // Chercher l'encaissement par référence agrégateur ou marchande
     const rows: Array<Record<string, unknown>> = await m.query(
-      `SELECT e.id, e.uuid, e.statut, e.montant, e.montant_net, e.etablissement_uuid,
+      `SELECT e.id, e.uuid, e.statut, e.montant, e.montant_net, e.etablissement_uuid, e.objet_type, e.objet_uuid, e.expire_le, e.reference_agregateur,
               e.portefeuille_id, e.agregateur_id, e.devise, e.reference_marchande,
               mp.delai_reglement_heures
          FROM "paiement"."encaissement" e
@@ -286,7 +310,11 @@ export class EncaissementService {
 
     // Mapper le statut agrégateur vers notre statut interne
     const agAdapter = this.agregateurs.obtenir(agregateurCode);
-    const verified = await agAdapter.verifierEncaissement(String(enc.reference_marchande));
+    // CinetPay se vérifie par notre référence marchande ; FedaPay et Kkiapay par l'identifiant de transaction de l'agrégateur.
+    const refVerification = agregateurCode === 'cinetpay'
+      ? String(enc.reference_marchande)
+      : String(enc.reference_agregateur ?? referenceAgregateurOuMarchande);
+    const verified = await agAdapter.verifierEncaissement(refVerification);
 
     let nouveauStatut: string | null = null;
     if (verified.statut === 'approuve') nouveauStatut = 'approuve';
@@ -295,6 +323,17 @@ export class EncaissementService {
     else if (verified.statut === 'expire') nouveauStatut = 'expire';
 
     if (!nouveauStatut) return;
+
+    // Garde anti-fraude : on n'approuve que si l'agrégateur confirme un montant et une devise conformes.
+    if (nouveauStatut === 'approuve' && (verified.montant < BigInt(String(enc.montant)) || verified.devise !== String(enc.devise))) {
+      this.log.error(`Encaissement ${enc.uuid}: montant/devise confirmés (${verified.montant} ${verified.devise}) non conformes à l'attendu`);
+      await m.query(
+        `INSERT INTO "paiement"."audit_evenement" (etablissement_uuid, acteur_uuid, acteur_role, action, objet_type, objet_uuid, apres, resultat)
+         VALUES ($1, NULL, 'systeme', 'encaissement.montant_non_conforme', 'encaissement', $2, $3::jsonb, 'refus')`,
+        [enc.etablissement_uuid, enc.uuid, JSON.stringify({ attendu: String(enc.montant), recu: verified.montant.toString(), devise: verified.devise })],
+      );
+      return;
+    }
 
     await m.query(
       `UPDATE "paiement"."encaissement"
@@ -428,9 +467,89 @@ export class EncaissementService {
           etablissementUuid: enc.etablissement_uuid,
           montantNet: montantNet.toString(),
           devise: enc.devise,
+          objetType: enc.objet_type ?? null,
+          objetUuid: enc.objet_uuid ?? null,
+          referenceMarchande: enc.reference_marchande ?? null,
         }),
       ],
     );
+  }
+
+  /** Modes d'encaissement réellement utilisables par un établissement (accord + modes + agrégateur + paramètres + interrupteur global). */
+  async modesEncaissementActifs(etablissementUuid: string, devise: string, montant?: bigint) {
+    return avecContexte(this.ds, { role: 'systeme' }, async (m) => {
+      const rows: Array<Record<string, unknown>> = await m.query(
+        `SELECT a.code AS agregateur_code, a.nom AS agregateur_nom, mp.code, mp.libelle, mp.operateur, mp.type,
+                mp.montant_min::text AS montant_min, mp.montant_max::text AS montant_max, mp.multiple::text AS multiple, mp.redirection
+           FROM "paiement"."accord_etablissement" ae
+           JOIN "paiement"."mode_paiement" mp ON mp.id = ae.mode_paiement_id
+           JOIN "paiement"."agregateur" a ON a.id = mp.agregateur_id
+          WHERE ae.etablissement_uuid = $1 AND ae.statut = 'accorde'
+            AND mp.statut = 'actif' AND mp.sens = 'entree' AND mp.devise = $2 AND a.statut = 'actif'
+            AND EXISTS (SELECT 1 FROM "paiement"."parametre_etablissement" pe
+                         WHERE pe.etablissement_uuid = $1 AND pe.devise = $2 AND pe.encaissement_actif)
+            AND EXISTS (SELECT 1 FROM "paiement"."portefeuille" p WHERE p.etablissement_uuid = $1 AND p.devise = $2 AND p.statut = 'actif')
+            AND NOT EXISTS (SELECT 1 FROM "paiement"."interrupteur_securite" i WHERE i.actif AND i.portee = 'global')
+            AND NOT EXISTS (SELECT 1 FROM "paiement"."interrupteur_securite" i WHERE i.actif AND i.portee = 'etablissement' AND i.cible_uuid = $1::uuid)
+          ORDER BY a.code, mp.libelle`,
+        [etablissementUuid, devise],
+      );
+      const filtres = rows.filter((r) => {
+        if (montant === undefined) return true;
+        if (montant < BigInt(String(r.montant_min))) return false;
+        if (r.montant_max != null && montant > BigInt(String(r.montant_max))) return false;
+        return BigInt(String(r.multiple)) <= 1n || montant % BigInt(String(r.multiple)) === 0n;
+      });
+      const parAgregateur = new Map<string, { code: string; nom: string; modes: Array<Record<string, unknown>> }>();
+      for (const r of filtres) {
+        const code = String(r.agregateur_code);
+        if (!parAgregateur.has(code)) parAgregateur.set(code, { code, nom: String(r.agregateur_nom), modes: [] });
+        parAgregateur.get(code)!.modes.push({ code: r.code, libelle: r.libelle, operateur: r.operateur, type: r.type, redirection: r.redirection });
+      }
+      return { devise, agregateurs: [...parAgregateur.values()] };
+    });
+  }
+
+  /**
+   * Dernier encaissement rattaché à un objet métier (ex. candidature).
+   * Si l'agrégateur n'a pas encore notifié, on le réinterroge : la réponse ne dépend pas d'un webhook reçu.
+   */
+  async obtenirParObjet(etablissementUuid: string, objetType: string, objetUuid: string) {
+    const lire = () => avecContexte(this.ds, { role: 'systeme' }, async (m) => {
+      const [row] = await m.query(
+        `SELECT e.uuid, e.statut, e.montant::text AS montant, e.devise, e.reference_marchande, e.url_paiement, e.expire_le,
+                e.approuve_le, a.code AS agregateur_code
+           FROM "paiement"."encaissement" e JOIN "paiement"."agregateur" a ON a.id = e.agregateur_id
+          WHERE e.etablissement_uuid = $1 AND e.objet_type = $2 AND e.objet_uuid = $3
+          ORDER BY (e.statut IN ('approuve','disponible')) DESC, e.created_at DESC LIMIT 1`,
+        [etablissementUuid, objetType, objetUuid],
+      );
+      return row as Record<string, unknown> | undefined;
+    });
+
+    let row = await lire();
+    if (!row) throw new NotFoundException({ code: 'ENCAISSEMENT_INTROUVABLE', message: 'Aucun paiement pour cet objet.' });
+
+    if (row.statut === 'initie' || row.statut === 'en_attente') {
+      try {
+        await this.ds.transaction(async (m) => {
+          await this.traiterWebhookEncaissement(String(row!.agregateur_code), String(row!.reference_marchande), 'verification', {}, m);
+        });
+        row = (await lire()) ?? row;
+      } catch (err: unknown) {
+        this.log.warn(`Vérification directe ${String(row.reference_marchande)} impossible: ${(err as Error).message}`);
+      }
+    }
+    const expire = row.expire_le ? new Date(String(row.expire_le)) : null;
+    const statut = String(row.statut);
+    return {
+      uuid: row.uuid, statut, montant: row.montant, devise: row.devise,
+      referenceMarchande: row.reference_marchande,
+      urlPaiement: statut === 'initie' || statut === 'en_attente' ? row.url_paiement : null,
+      expireLe: expire ? expire.toISOString() : null,
+      expire: !!expire && expire.getTime() < Date.now() && (statut === 'initie' || statut === 'en_attente'),
+      approuveLe: row.approuve_le ?? null,
+    };
   }
 
   async listerEncaissements(

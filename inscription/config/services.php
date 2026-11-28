@@ -19,6 +19,7 @@ return [
             'etablissements'=> env('URL_SERVICE_ETABLISSEMENTS',''),
             'inscription'   => env('URL_SERVICE_INSCRIPTION',   ''),
             'scolarite'     => env('URL_SERVICE_SCOLARITE',     ''),
+            'paiements'     => env('URL_SERVICE_PAIEMENTS',     ''),
             'vie-scolaire'  => env('URL_SERVICE_VIE_SCOLAIRE',  ''),
         ],
         // Neon est une base managée distante : la latence d'un aller-retour

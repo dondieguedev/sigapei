@@ -37,7 +37,7 @@ const TONE_ICONS = { danger: IconDanger, warning: IconWarning, primary: IconPrim
 export default function ConfirmDialog({
   open, title, message, children,
   confirmLabel = 'Confirmer', cancelLabel = 'Annuler',
-  tone = 'primary', loading = false,
+  tone = 'primary', loading = false, hideCancel = false,
   onConfirm, onCancel,
 }) {
   useEffect(() => {
@@ -65,9 +65,11 @@ export default function ConfirmDialog({
         {message && <p className="cd-msg">{message}</p>}
         {children}
         <div className="cd-actions">
-          <button type="button" className="cd-btn" onClick={onCancel} disabled={loading}>
-            {cancelLabel}
-          </button>
+          {!hideCancel && (
+            <button type="button" className="cd-btn" onClick={onCancel} disabled={loading}>
+              {cancelLabel}
+            </button>
+          )}
           <button type="button" className="cd-btn cd-btn--main" onClick={onConfirm} disabled={loading}>
             {loading ? 'Veuillez patienter…' : confirmLabel}
           </button>

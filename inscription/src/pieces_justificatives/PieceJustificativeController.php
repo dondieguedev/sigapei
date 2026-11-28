@@ -3,56 +3,36 @@
 namespace App\pieces_justificatives;
 
 use App\common\Responses\ApiResponse;
-use App\pieces_justificatives\PieceJustificative;
+use App\common\Services\AuditService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
+/**
+ * Les pièces ne sont plus enregistrées par chemin fourni par le client : elles sont déposées avec la
+ * candidature (PieceUploadService) et le chemin est construit par le serveur. Il ne reste que la consultation.
+ */
 class PieceJustificativeController extends Controller
 {
-    public function __construct(
-        protected PieceJustificativeService $service
-    ) {}
-
-    public function store(Request $request, string $uuid): JsonResponse
-    {
-        $validated = $request->validate([
-            'type' => 'required|string|in:bulletin,acte_naissance,certificat_nationalite,photo,autre',
-            'nom_original' => 'required|string|max:255',
-            'chemin_stockage' => 'required|string|max:500',
-            'taille_octets' => 'nullable|integer',
-            'mime_type' => 'nullable|string|max:100',
-        ]);
-
-        try {
-            $piece = $this->service->ajouterPiece($uuid, $validated);
-
-            return ApiResponse::succes([
-                'uuid' => $piece->uuid,
-                'type' => $piece->type,
-                'nom_original' => $piece->nom_original,
-                'chemin_stockage' => $piece->chemin_stockage,
-                'statut_validation' => $piece->statut_validation,
-            ], 'Piece justificative enregistree avec succes', 201);
-        } catch (\Throwable $e) {
-            return ApiResponse::erreur($e->getMessage(), 'ERREUR_AJOUT_PIECE', 400);
-        }
-    }
-
-    /**
-     * Télécharger / visualiser une pièce justificative.
-     * Génère une URL signée temporaire (5 min) depuis S3/MinIO.
-     */
-    public function telecharger(string $pieceUuid): \Illuminate\Http\Response|JsonResponse
+    /** URL signée de très courte durée, après contrôle du cloisonnement par établissement et audit. */
+    public function telecharger(string $pieceUuid): JsonResponse
     {
         try {
-            $piece = PieceJustificative::where('uuid', $pieceUuid)->firstOrFail();
+            $piece = PieceJustificative::where('uuid', $pieceUuid)->firstOrFail();   // TenantScope : son établissement uniquement
 
-            // Générer URL signée temporaire depuis le stockage objet
-            $url = \Illuminate\Support\Facades\Storage::temporaryUrl(
-                $piece->chemin_stockage,
-                now()->addMinutes(5)
-            );
+            $tenant = app()->bound('current_tenant_id') ? app('current_tenant_id') : null;
+            $attendu = "tenants/{$tenant}/candidatures/";
+            if ($tenant === null || !str_starts_with((string) $piece->chemin_stockage, $attendu) || str_contains((string) $piece->chemin_stockage, '..')) {
+                Log::warning('[PIECE] Chemin hors périmètre du tenant', ['piece' => $piece->uuid]);
+
+                return ApiResponse::erreur('Pièce introuvable ou inaccessible.', 'PIECE_INTROUVABLE', 404);
+            }
+
+            $url = Storage::disk(config('inscription.disque_pieces'))->temporaryUrl($piece->chemin_stockage, now()->addMinutes(2));
+
+            AuditService::journaliser('CONSULTATION_PIECE', "Consultation de la pièce {$piece->uuid}",
+                ['piece_uuid' => $piece->uuid, 'candidature_id' => $piece->candidature_id]);
 
             return response()->json([
                 'succes'       => true,

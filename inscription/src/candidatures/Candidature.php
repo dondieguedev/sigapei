@@ -38,6 +38,17 @@ class Candidature extends Model
         'parent_telephone',
         'parent_email',
         'parent_lien',
+        'reference',
+        'etablissement_uuid',
+        'donnees_complementaires',
+        'statut_paiement',
+        'montant_du',
+        'devise_paiement',
+        'paiement_expire_le',
+        'empreinte_doublon',
+        'traite_par_uuid',
+        'date_traitement',
+        'lot_uuid',
     ];
 
     protected $casts = [
@@ -45,6 +56,10 @@ class Candidature extends Model
         'classe_visee_id' => 'integer',
         'date_naissance' => 'date',
         'date_soumission' => 'datetime',
+        'donnees_complementaires' => 'array',
+        'montant_du' => 'decimal:2',
+        'paiement_expire_le' => 'datetime',
+        'date_traitement' => 'datetime',
     ];
 
     public function piecesJustificatives(): HasMany

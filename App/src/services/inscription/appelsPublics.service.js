@@ -7,16 +7,17 @@ import { ENV } from '../../config/commun/env'
 
 const BASE = (ENV.services.inscription || 'http://localhost:4003').replace(/\/+$/, '')
 
+/** `null` = introuvable (404) ; une panne réseau ou serveur LÈVE une erreur (au lieu d'afficher « aucun appel »). */
 async function getPublic(path) {
+  let res
   try {
-    const res = await fetch(`${BASE}${path}`, {
-      headers: { Accept: 'application/json' },
-    })
-    if (!res.ok) return null
-    return res.json()
+    res = await fetch(`${BASE}${path}`, { headers: { Accept: 'application/json' } })
   } catch {
-    return null
+    throw new Error('Impossible de joindre le service. Vérifiez votre connexion.')
   }
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error('Le service est momentanément indisponible. Réessayez dans un instant.')
+  return res.json()
 }
 
 export const appelsPublicsService = {

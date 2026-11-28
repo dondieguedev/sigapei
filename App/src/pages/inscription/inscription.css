@@ -477,3 +477,30 @@
   gap: 1.25rem;
 }
 
+
+
+/* ═══ Statuts supplémentaires, bouton neutre, sélection multiple ═══ */
+.status-pill--en_attente_paiement { background: #fffbeb; color: #b45309; }
+.status-pill--expiree { background: #f1f5f9; color: #475569; }
+[data-theme='dark'] .status-pill--en_attente_paiement, .dark .status-pill--en_attente_paiement { background: rgba(245, 158, 11, 0.16); color: #fbbf24; }
+[data-theme='dark'] .status-pill--expiree, .dark .status-pill--expiree { background: rgba(148, 163, 184, 0.16); color: #cbd5e1; }
+
+.btn-action { background: #f1f5f9; color: #1e293b; transition: background .15s, color .15s; }
+.btn-action:hover:not(:disabled) { background: #e2e8f0; }
+.btn-action:disabled { opacity: .55; cursor: not-allowed; }
+[data-theme='dark'] .btn-action, .dark .btn-action { background: rgba(148, 163, 184, 0.14); color: #e2e8f0; }
+[data-theme='dark'] .btn-action:hover:not(:disabled), .dark .btn-action:hover:not(:disabled) { background: rgba(148, 163, 184, 0.26); color: #fff; }
+
+.module-select { height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--sg-border, #d6dde5); background: var(--sg-surface, #fff); color: var(--sg-text, #1a1a1a); font: inherit; font-size: .88rem; max-width: 260px; }
+[data-theme='dark'] .module-select, .dark .module-select { background: #162232; border-color: #283a52; color: #f8fafc; }
+
+.sel-col { width: 44px; text-align: center; }
+.sel-box { width: 17px; height: 17px; accent-color: #006b3c; cursor: pointer; }
+.sel-box:disabled { cursor: not-allowed; opacity: .4; }
+tr.sel-row--on td { background: rgba(0, 107, 60, 0.07); }
+[data-theme='dark'] tr.sel-row--on td, .dark tr.sel-row--on td { background: rgba(47, 180, 111, 0.12); }
+
+.sel-bar { position: sticky; top: 8px; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 12px; padding: 10px 14px; border-radius: 10px; border: 1px solid #006b3c; background: #ecfdf5; color: #064e3b; box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.sel-bar strong { margin-right: auto; font-size: .92rem; }
+[data-theme='dark'] .sel-bar, .dark .sel-bar { background: #10231a; border-color: #2fb46f; color: #d1fae5; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+.sel-bar .btn-action--success, .sel-bar .btn-action--danger, .sel-bar .btn-action { padding: .5rem .9rem; font-size: .82rem; }

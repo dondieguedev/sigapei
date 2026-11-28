@@ -122,6 +122,57 @@ class OpenApiSpec
                         ],
                     ],
                 ],
+                '/public/candidatures' => [
+                    'post' => [
+                        'tags' => ['Candidatures'],
+                        'summary' => 'Deposer une candidature (public, sans compte)',
+                        'description' => 'multipart/form-data. Champs du candidat, `attestations[cN]`, fichiers `fichiers[pN]` (pN = identifiant de piece publie dans `formulaire.pieces`), `captcha_token`, `slug`. Le serveur controle criteres, dates, places, formats (5 Mo max) et doublons : un dossier non conforme n\'est jamais enregistre (422 avec `details` par champ).',
+                        'responses' => [
+                            '201' => ['description' => 'Dossier enregistre (reference de suivi). Statut `en_attente_paiement` si l\'appel est payant.'],
+                            '409' => ['description' => 'Appel clos / non ouvert / places epuisees / doublon'],
+                            '422' => ['description' => 'Criteres non remplis ou donnees invalides (details par champ), captcha invalide'],
+                            '429' => ['description' => 'Trop de tentatives'],
+                        ],
+                    ],
+                ],
+                '/public/candidatures/{reference}/suivi' => [
+                    'get' => [
+                        'tags' => ['Candidatures'],
+                        'summary' => 'Suivre une candidature par son numero de suivi (verifie le paiement aupres du service Paiements)',
+                        'responses' => ['200' => ['description' => 'Statut du dossier et du paiement'], '404' => ['description' => 'Numero inconnu']],
+                    ],
+                ],
+                '/public/candidatures/{reference}/paiement/modes' => [
+                    'get' => [
+                        'tags' => ['Candidatures'],
+                        'summary' => 'Moyens de paiement actifs et accordes a l\'etablissement',
+                        'responses' => ['200' => ['description' => 'Agregateurs et modes disponibles'], '503' => ['description' => 'Paiement indisponible']],
+                    ],
+                ],
+                '/public/candidatures/{reference}/paiement' => [
+                    'post' => [
+                        'tags' => ['Candidatures'],
+                        'summary' => 'Initier le paiement des frais (montant impose par l\'appel)',
+                        'description' => 'Corps : `agregateur`, `url_retour` (origine autorisee), `slug`. Le dossier passe a `soumise` uniquement apres confirmation serveur a serveur.',
+                        'responses' => ['200' => ['description' => 'URL de paiement'], '410' => ['description' => 'Delai de paiement depasse']],
+                    ],
+                ],
+                '/candidatures/lot/valider' => [
+                    'post' => [
+                        'tags' => ['Candidatures'],
+                        'summary' => 'Valider plusieurs candidatures (administrateur, 50 max)',
+                        'description' => 'Corps : `uuids[]`. Chaque dossier est traite dans sa transaction ; reponse avec le resultat par dossier. Un dossier rejete ne peut pas etre valide.',
+                        'responses' => ['200' => ['description' => 'Resultat par dossier (lot_uuid, reussis, echecs, resultats[])']],
+                    ],
+                ],
+                '/candidatures/lot/rejeter' => [
+                    'post' => [
+                        'tags' => ['Candidatures'],
+                        'summary' => 'Rejeter plusieurs candidatures (administrateur ou personnel, 50 max)',
+                        'description' => 'Corps : `uuids[]`, `motif` (5 a 500 caracteres, unique pour tout le lot). Un dossier valide ne peut pas etre rejete.',
+                        'responses' => ['200' => ['description' => 'Resultat par dossier']],
+                    ],
+                ],
                 '/candidatures/{uuid}' => [
                     'get' => [
                         'tags' => ['Candidatures'],
@@ -195,32 +246,6 @@ class OpenApiSpec
                         ],
                         'responses' => [
                             '200' => ['description' => 'Candidature rejetee avec motif'],
-                        ],
-                    ],
-                ],
-                '/candidatures/{uuid}/pieces-justificatives' => [
-                    'post' => [
-                        'tags' => ['Pieces Justificatives'],
-                        'summary' => 'Ajouter une piece justificative au dossier',
-                        'security' => [['BearerAuth' => []]],
-                        'parameters' => [
-                            ['name' => 'uuid', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string', 'format' => 'uuid']],
-                            ['name' => 'X-Tenant-Id', 'in' => 'header', 'required' => true, 'schema' => ['type' => 'string', 'format' => 'uuid']],
-                        ],
-                        'requestBody' => [
-                            'required' => true,
-                            'content' => [
-                                'application/json' => [
-                                    'example' => [
-                                        'type_piece' => 'acte_naissance',
-                                        'nom_fichier' => 'acte_naissance.pdf',
-                                        'fichier_url' => 'https://s3.region.amazonaws.com/sigapei-documents/tenants/1/acte.pdf',
-                                    ],
-                                ],
-                            ],
-                        ],
-                        'responses' => [
-                            '201' => ['description' => 'Piece justificative enregistree'],
                         ],
                     ],
                 ],

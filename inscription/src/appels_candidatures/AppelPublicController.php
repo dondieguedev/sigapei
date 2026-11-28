@@ -2,6 +2,7 @@
 
 namespace App\appels_candidatures;
 
+use App\candidatures\CriteresEvaluateur;
 use App\common\Services\InterneClient;
 use App\common\Services\TenantResolver;
 use Illuminate\Http\JsonResponse;
@@ -39,6 +40,9 @@ class AppelPublicController extends Controller
 
         // Si slug fourni sans UUID : résoudre via l'endpoint de résolution
         if (!empty($slug) && empty($etablissementUuid)) {
+            if (!preg_match('/^[a-z0-9][a-z0-9-]{0,79}$/', (string) $slug)) {   // le slug entre dans une URL interne
+                return response()->json(['succes' => false, 'message' => 'Établissement introuvable.'], 404);
+            }
             try {
                 $reponse = $this->interne->get('etablissements', "/v1/interne/resolution-slug/{$slug}");
                 $etablissementUuid = $reponse['tenantUuid'] ?? $reponse['uuid'] ?? null;
@@ -66,13 +70,14 @@ class AppelPublicController extends Controller
 
         $filtres = $request->only(['cycle', 'statut', 'annee_scolaire']);
 
-        // Par défaut : appels ouverts, planifiés ou brouillons (pas terminés/annulés)
+        // Public : appels ouverts ou annoncés. Les brouillons, terminés et annulés ne sont jamais exposés.
         $appels = AppelCandidature::query()
-            ->whereIn('statut', ['ouvert', 'planifie', 'brouillon'])
+            ->whereIn('statut', ['ouvert', 'planifie'])
             ->when(!empty($filtres['cycle']),          fn($q) => $q->where('cycle', $filtres['cycle']))
             ->when(!empty($filtres['annee_scolaire']), fn($q) => $q->where('annee_scolaire', $filtres['annee_scolaire']))
             ->orderBy('date_debut', 'asc')
-            ->get();
+            ->get()
+            ->map(fn(AppelCandidature $x) => $this->presenter($x));
 
         return response()->json([
             'succes' => true,
@@ -85,13 +90,25 @@ class AppelPublicController extends Controller
         try {
             $appel = AppelCandidature::withoutGlobalScopes()->where('uuid', $uuid)->firstOrFail();
 
-            if (!in_array($appel->statut, ['ouvert', 'planifie', 'brouillon'])) {
+            if (!in_array($appel->statut, ['ouvert', 'planifie'], true)) {
                 return response()->json(['succes' => false, 'message' => 'Appel non disponible.'], 404);
             }
 
-            return response()->json(['succes' => true, 'data' => $appel]);
+            return response()->json(['succes' => true, 'data' => $this->presenter($appel)]);
         } catch (\Throwable) {
             return response()->json(['succes' => false, 'message' => 'Appel introuvable.'], 404);
         }
+    }
+
+    /** Appel + schéma du formulaire (critères lisibles, pièces, frais, étapes) calculé par le serveur. */
+    private function presenter(AppelCandidature $appel): array
+    {
+        $donnees = $appel->makeHidden(['id', 'tenant_id'])->toArray();
+        $formulaire = CriteresEvaluateur::schema($appel);
+        $donnees['formulaire'] = $formulaire;
+        $donnees['accepte_candidatures'] = $appel->accepteCandidatures() && ($appel->places_disponibles === null || $appel->places_disponibles > 0);
+        $donnees['devise'] = CriteresEvaluateur::devise($appel);
+
+        return $donnees;
     }
 }

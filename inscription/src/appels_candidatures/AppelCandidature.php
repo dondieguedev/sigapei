@@ -56,6 +56,16 @@ class AppelCandidature extends Model
         'places_disponibles'   => 'integer',
     ];
 
+    /** Un appel n'accepte des dossiers que s'il est « ouvert » ET dans sa fenêtre de dates. */
+    public function accepteCandidatures(): bool
+    {
+        $now = now();
+
+        return $this->statut === 'ouvert'
+            && (!$this->date_debut || $now->gte($this->date_debut))
+            && (!$this->date_fin || $now->lte($this->date_fin));
+    }
+
     /**
      * Vérifie si l'appel est actuellement actif (entre date_debut et date_fin, et statut ouvert)
      */
